@@ -19,7 +19,19 @@
       "Bash(/opt/homebrew/bin/gh pr *)",
       "Bash(git -C /Users/yajimayumedo/Claude checkout -b update/claude-settings)",
       "Bash(git -C /Users/yajimayumedo/Claude add .claude/settings.local.json)",
-      "Bash(git -C /Users/yajimayumedo/Claude push -u origin update/claude-settings)"
+      "Bash(git -C /Users/yajimayumedo/Claude push -u origin update/claude-settings)",
+      "Bash(uv --version)",
+      "Bash(pyenv --version)",
+      "Bash(brew --version)",
+      "Bash(uv python *)",
+      "Read(//Users/yajimayumedo/.cargo/bin/**)",
+      "Read(//Users/yajimayumedo/.local/bin/**)",
+      "Bash(grep 'local/bin' ~/.zshrc 2>/dev/null)",
+      "Bash(code --version)",
+      "Bash(pip3 install *)",
+      "Bash(python3 video_denoise.py result.mp4)",
+      "Bash(brew install *)",
+      "Bash(which ffmpeg *)"
     ]
   }
 }
