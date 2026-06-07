@@ -80,6 +80,34 @@ def place_entities(
             dungeon.entities.append(entity_factories.slime.spawn(x, y))
 
 
+def place_items(
+    room: RectangularRoom, dungeon: GameMap, maximum_items: int
+) -> None:
+    """1つの部屋にランダムな数のアイテムを配置する。"""
+    number_of_items = random.randint(0, maximum_items)
+
+    for _ in range(number_of_items):
+        x = random.randint(room.x1 + 1, room.x2 - 1)
+        y = random.randint(room.y1 + 1, room.y2 - 1)
+
+        if any(e.x == x and e.y == y for e in dungeon.entities):
+            continue
+
+        # 種類を重み付き抽選（消費アイテム多め、装備は控えめ）
+        templates = [
+            entity_factories.healing_potion,
+            entity_factories.lightning_scroll,
+            entity_factories.confusion_scroll,
+            entity_factories.dagger,
+            entity_factories.sword,
+            entity_factories.leather_armor,
+            entity_factories.chain_mail,
+        ]
+        weights = [50, 12, 10, 10, 5, 8, 5]
+        template = random.choices(templates, weights=weights)[0]
+        dungeon.entities.append(template.spawn(x, y))
+
+
 def generate_dungeon(
     max_rooms: int,
     room_min_size: int,
@@ -87,6 +115,7 @@ def generate_dungeon(
     map_width: int,
     map_height: int,
     max_monsters_per_room: int,
+    max_items_per_room: int,
     player: Entity,
 ) -> GameMap:
     """ランダムなダンジョンを生成して GameMap を返す。"""
@@ -118,8 +147,9 @@ def generate_dungeon(
             # 直前の部屋と通路でつなぐ
             for x, y in tunnel_between(rooms[-1].center, new_room.center):
                 dungeon.tiles[x, y] = tile_types.floor
-            # 2部屋目以降に敵を配置
+            # 2部屋目以降に敵とアイテムを配置
             place_entities(new_room, dungeon, max_monsters_per_room)
+            place_items(new_room, dungeon, max_items_per_room)
 
         rooms.append(new_room)
         # FOV 用に部屋の範囲を記録

@@ -18,13 +18,15 @@ class Engine:
         self.width = width
         self.height = height
         self.game_over = False
-        self.attack_mode = False  # True なら方向キーで攻撃、False なら移動
+        self.attack_mode = False     # True なら方向キーで攻撃、False なら移動
+        self.inventory_open = False  # 持ち物メニューを開いているか
         # 攻撃モーションの予約 [(entity, dx, dy), ...]。Renderer が取り出して再生する。
         self.pending_animations = []
         self.message_log = MessageLog()
         self.message_log.add_message("ダンジョンへようこそ。", colors.WELCOME)
         # プレイヤーはテンプレートから複製して用意（位置は生成時に決まる）
         self.player = entity_factories.player.spawn(0, 0)
+        self._give_starting_equipment()
         # ランダムダンジョンを生成（プレイヤー位置・敵配置もこの中で行う）
         self.game_map = generate_dungeon(
             max_rooms=30,
@@ -33,6 +35,7 @@ class Engine:
             map_width=width,
             map_height=height,
             max_monsters_per_room=2,
+            max_items_per_room=1,
             player=self.player,
         )
         self.update_fov()  # 初期視界を計算
@@ -58,6 +61,14 @@ class Engine:
                 self.player.fighter.regenerate_stamina()  # 攻撃以外で回復
             self.update_fov()          # プレイヤーが動いたので視界更新
             self.handle_enemy_turns()  # 敵は視界内のものだけ動く
+
+    def _give_starting_equipment(self) -> None:
+        """短剣と革の鎧を持たせて装備させる（開始時）。"""
+        dagger = entity_factories.dagger.spawn(0, 0)
+        armor = entity_factories.leather_armor.spawn(0, 0)
+        self.player.inventory.items.extend([dagger, armor])
+        self.player.equipment.weapon = dagger
+        self.player.equipment.armor = armor
 
     def update_fov(self) -> None:
         """プレイヤー位置から視界を再計算し、探索済みに反映する。"""

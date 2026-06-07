@@ -5,7 +5,8 @@ from typing import TYPE_CHECKING, List, Optional, Tuple
 
 import numpy as np
 
-from actions import MeleeAction, MovementAction
+import colors
+from actions import BumpAction, MeleeAction, MovementAction
 from pathfinding import find_path
 
 if TYPE_CHECKING:
@@ -91,3 +92,28 @@ class HostileEnemy(BaseAI):
             if other is not None and other is not engine.player and other.ai is not None:
                 return other
         return None
+
+
+class ConfusedEnemy(BaseAI):
+    """混乱状態。一定ターン、ランダムな方向へよろめく（誰かにぶつかれば攻撃）。
+
+    混乱が解けると元の AI に戻る。混乱の巻物で付与される。
+    """
+
+    def __init__(self, entity: "Entity", previous_ai: Optional[BaseAI], turns: int):
+        super().__init__(entity)
+        self.previous_ai = previous_ai
+        self.turns_remaining = turns
+
+    def perform(self, engine: "Engine") -> None:
+        if self.turns_remaining <= 0:
+            engine.message_log.add_message(
+                f"{self.entity.name} の混乱が解けた。", colors.NO_EFFECT
+            )
+            self.entity.ai = self.previous_ai  # 元の行動に戻す
+            return
+
+        self.turns_remaining -= 1
+        dx, dy = random.choice([(1, 0), (-1, 0), (0, 1), (0, -1)])
+        # ランダム方向へ。誰か（プレイヤーや他の敵）にぶつかれば攻撃になる。
+        BumpAction(dx, dy).perform(engine, self.entity)

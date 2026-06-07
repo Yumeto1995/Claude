@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 import colors
-from components.level import HP_PER_LEVEL, POWER_PER_LEVEL
+import combat
 
 if TYPE_CHECKING:
     from engine import Engine
@@ -47,6 +47,60 @@ class ToggleAttackModeAction(Action):
         engine.message_log.add_message(f"{mode} に切り替えた。", colors.WELCOME)
 
 
+class ToggleInventoryAction(Action):
+    """持ち物メニューを開閉する（ターンは経過しない）。"""
+
+    consumes_turn = False
+
+    def perform(self, engine: Engine, entity: Entity) -> None:
+        engine.inventory_open = not engine.inventory_open
+
+
+class UseItemAction(Action):
+    """持ち物のアイテムを使う。"""
+
+    def __init__(self, item: Entity):
+        self.item = item
+
+    def perform(self, engine: Engine, entity: Entity) -> None:
+        engine.inventory_open = False  # 選んだらメニューを閉じる
+        item = self.item
+
+        # 装備品なら装備/解除（持ち物には残る）
+        if item.equippable is not None and entity.equipment is not None:
+            entity.equipment.toggle_equip(item, engine)
+            return
+
+        # 消費アイテムなら使用（成功時のみ消費）
+        if item.consumable is not None and entity.inventory is not None:
+            used = item.consumable.activate(engine, entity)
+            if used:
+                entity.inventory.items.remove(item)
+            else:
+                self.consumes_turn = False  # 使えなかった（満タン等）→ターン非消費
+            return
+
+        self.consumes_turn = False
+
+
+def _auto_pickup(engine: Engine, actor: Entity) -> None:
+    """actor が乗っている床のアイテムを1つ拾う（持ち物がいっぱいなら拾わない）。"""
+    inv = actor.inventory
+    for item in list(engine.game_map.entities):
+        if item.consumable is None:
+            continue  # アイテムでない
+        if item.x == actor.x and item.y == actor.y:
+            if len(inv.items) >= inv.capacity:
+                engine.message_log.add_message(
+                    f"持ち物がいっぱいで {item.name} を拾えない。", colors.NO_EFFECT
+                )
+                return
+            engine.game_map.entities.remove(item)
+            inv.items.append(item)
+            engine.message_log.add_message(f"{item.name} を拾った。", colors.ITEM)
+            return
+
+
 class ActionWithDirection(Action):
     """方向 (dx, dy) を持つ行動の共通基底。"""
 
@@ -77,6 +131,9 @@ class MovementAction(ActionWithDirection):
             return  # 他のエンティティがいる
 
         entity.move(self.dx, self.dy)
+        # 持ち物を持つ者（＝プレイヤー）が乗った床のアイテムを自動取得
+        if entity.inventory is not None:
+            _auto_pickup(engine, entity)
 
 
 class MeleeAction(ActionWithDirection):
@@ -109,54 +166,9 @@ class MeleeAction(ActionWithDirection):
         desc = f"{entity.name} が {target.name} を攻撃"
         if damage > 0:
             engine.message_log.add_message(f"{desc} → {damage} ダメージ", attack_color)
-            target.fighter.hp -= damage
+            combat.inflict_damage(engine, target, damage, attacker=entity)
         else:
             engine.message_log.add_message(f"{desc} → 効果がない", colors.NO_EFFECT)
-
-        # HP が尽きたら撃破
-        if target.fighter.hp <= 0:
-            self._die(engine, target)
-            # 倒した側が経験値を得る（プレイヤーでも敵でも）
-            if entity.level is not None and target.level is not None:
-                self._grant_xp(engine, entity, target.level.xp_given)
-
-    @staticmethod
-    def _grant_xp(engine: Engine, attacker: Entity, amount: int) -> None:
-        if amount <= 0 or attacker.level is None or attacker.fighter is None:
-            return
-        is_player = attacker is engine.player
-        if is_player:
-            engine.message_log.add_message(f"{amount} の経験値を得た。", colors.XP)
-
-        gained = attacker.level.add_xp(amount)
-        for _ in range(gained):
-            f = attacker.fighter
-            f.max_hp += HP_PER_LEVEL
-            f.hp += HP_PER_LEVEL       # 上昇分だけ回復
-            f.power += POWER_PER_LEVEL
-            if is_player:
-                engine.message_log.add_message(
-                    f"レベルアップ！ Lv.{attacker.level.current_level} になった。",
-                    colors.LEVEL_UP,
-                )
-            elif engine.game_map.visible[attacker.x, attacker.y]:
-                # 見えている敵のレベルアップだけ通知（ログを汚さない）
-                engine.message_log.add_message(
-                    f"{attacker.name} がレベルアップした！", colors.LEVEL_UP
-                )
-
-    @staticmethod
-    def _die(engine: Engine, target: Entity) -> None:
-        if target is engine.player:
-            engine.message_log.add_message("あなたは倒れた！  ESC で終了", colors.PLAYER_DIE)
-            engine.game_over = True
-        else:
-            engine.message_log.add_message(f"{target.name} を倒した！", colors.ENEMY_DIE)
-            target.ai = None                 # もう動かない
-            target.blocks_movement = False   # 死体はすり抜けられる
-            target.name = f"{target.name}の死体"
-        # 共通：見た目を死体スプライトに
-        target.sprite = "corpse"
 
 
 class BumpAction(ActionWithDirection):

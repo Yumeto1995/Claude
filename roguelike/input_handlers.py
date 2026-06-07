@@ -10,6 +10,8 @@ from actions import (
     EscapeAction,
     MeleeAction,
     ToggleAttackModeAction,
+    ToggleInventoryAction,
+    UseItemAction,
     WaitAction,
 )
 
@@ -37,6 +39,10 @@ def dispatch_event(event: pygame.event.Event, engine: "Engine") -> Optional[Acti
     if event.type == pygame.KEYDOWN:
         key = event.key
 
+        # 持ち物メニューを開いている間は専用の操作
+        if engine.inventory_open:
+            return _inventory_keys(key, engine)
+
         # 攻撃モードの方向キーは1押し1攻撃（連打防止のため単発で扱う）
         if key in _DIRECTIONS and engine.attack_mode:
             dx, dy = _DIRECTIONS[key]
@@ -46,9 +52,22 @@ def dispatch_event(event: pygame.event.Event, engine: "Engine") -> Optional[Acti
             return WaitAction()                 # 足踏み
         if key == pygame.K_SPACE:
             return ToggleAttackModeAction()      # 攻撃/移動モード切替
+        if key == pygame.K_i:
+            return ToggleInventoryAction()       # 持ち物を開く
         if key == pygame.K_ESCAPE:
             return EscapeAction()
 
+    return None
+
+
+def _inventory_keys(key: int, engine: "Engine") -> Optional[Action]:
+    """持ち物メニュー中のキー操作。a〜 でアイテム使用、ESC/i で閉じる。"""
+    if key in (pygame.K_ESCAPE, pygame.K_i):
+        return ToggleInventoryAction()  # 閉じる
+    index = key - pygame.K_a            # a=0, b=1, ...
+    items = engine.player.inventory.items
+    if 0 <= index < len(items):
+        return UseItemAction(items[index])
     return None
 
 
@@ -57,7 +76,7 @@ def held_movement_action(engine: "Engine") -> Optional[Action]:
 
     メインループがクールダウンを挟みつつ毎フレーム呼ぶことで連続移動になる。
     """
-    if engine.attack_mode or engine.game_over:
+    if engine.attack_mode or engine.game_over or engine.inventory_open:
         return None
     keys = pygame.key.get_pressed()
     for keycode, (dx, dy) in _DIRECTIONS.items():

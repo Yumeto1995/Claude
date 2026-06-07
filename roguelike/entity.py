@@ -5,7 +5,11 @@ from typing import TYPE_CHECKING, Optional, Type
 
 if TYPE_CHECKING:
     from components.ai import BaseAI
+    from components.consumable import Consumable
+    from components.equipment import Equipment
+    from components.equippable import Equippable
     from components.fighter import Fighter
+    from components.inventory import Inventory
     from components.level import Level
 
 
@@ -26,6 +30,10 @@ class Entity:
         ai_cls: Optional[Type["BaseAI"]] = None,
         fighter: Optional["Fighter"] = None,
         level: Optional["Level"] = None,
+        consumable: Optional["Consumable"] = None,
+        inventory: Optional["Inventory"] = None,
+        equippable: Optional["Equippable"] = None,
+        equipment: Optional["Equipment"] = None,
     ):
         self.x = x
         self.y = y
@@ -43,6 +51,20 @@ class Entity:
         self.level = level
         if self.level is not None:
             self.level.entity = self
+        # アイテム用：使用効果。プレイヤー用：持ち物。
+        self.consumable = consumable
+        if self.consumable is not None:
+            self.consumable.entity = self
+        self.inventory = inventory
+        if self.inventory is not None:
+            self.inventory.entity = self
+        # 装備：equippable はアイテム側（武器/防具）、equipment はプレイヤー側（装備枠）
+        self.equippable = equippable
+        if self.equippable is not None:
+            self.equippable.entity = self
+        self.equipment = equipment
+        if self.equipment is not None:
+            self.equipment.entity = self
 
     def spawn(self, x: int, y: int) -> "Entity":
         """このテンプレートの複製を (x, y) に作って返す。"""

@@ -51,6 +51,13 @@ PLACEHOLDER_COLORS: Dict[str, tuple] = {
     "goblin": (80, 200, 80),
     "slime": (80, 200, 200),
     "corpse": (191, 0, 0),
+    "potion": (230, 90, 200),
+    "scroll": (230, 220, 140),
+    "scroll_confuse": (170, 120, 255),
+    "dagger": (200, 200, 210),
+    "sword": (230, 230, 245),
+    "leather_armor": (160, 110, 60),
+    "chain_mail": (150, 160, 180),
 }
 
 TERRAIN_KEYS = {"floor", "wall"}
@@ -163,10 +170,60 @@ class Renderer:
 
         self._render_panel(engine)
 
+        if engine.inventory_open:
+            self._render_inventory(engine)
+
         if engine.game_over:
             self._render_game_over()
 
         pygame.display.flip()
+
+    def _render_inventory(self, engine: "Engine") -> None:
+        """持ち物メニューのオーバーレイ。"""
+        items = engine.player.inventory.items
+        x, y = 24, 24
+        width = 380
+        height = 56 + max(1, len(items)) * self.LINE_HEIGHT
+
+        box = pygame.Surface((width, height))
+        box.set_alpha(235)
+        box.fill((15, 15, 25))
+        self.screen.blit(box, (x, y))
+        pygame.draw.rect(self.screen, (120, 120, 150), (x, y, width, height), 2)
+
+        title = self.font.render("もちもの（i で閉じる）", True, (255, 255, 255))
+        self.screen.blit(title, (x + 14, y + 12))
+
+        if not items:
+            self.screen.blit(
+                self.font.render("（からっぽ）", True, (160, 160, 160)),
+                (x + 18, y + 12 + self.LINE_HEIGHT),
+            )
+        else:
+            equipment = engine.player.equipment
+            for i, item in enumerate(items):
+                letter = chr(ord("a") + i)
+                stat = self._equippable_stat_text(item)
+                mark = "  [装備中]" if equipment.item_is_equipped(item) else ""
+                line = self.font.render(
+                    f"{letter}) {item.name}{stat}{mark}", True, (230, 230, 230)
+                )
+                self.screen.blit(line, (x + 18, y + 12 + (i + 1) * self.LINE_HEIGHT))
+
+    @staticmethod
+    def _equippable_stat_text(item) -> str:
+        """装備品の性能表示用テキスト（攻+/防+/ST消費）。装備品でなければ空。"""
+        eq = item.equippable
+        if eq is None:
+            return ""
+        parts = []
+        if eq.power_bonus:
+            parts.append(f"攻+{eq.power_bonus}")
+        if eq.defense_bonus:
+            parts.append(f"防+{eq.defense_bonus}")
+        if eq.stamina_cost is not None:
+            parts.append(f"ST{eq.stamina_cost}")
+        return "  (" + " ".join(parts) + ")" if parts else ""
 
     @staticmethod
     def _darken(surf: pygame.Surface) -> pygame.Surface:
@@ -213,9 +270,11 @@ class Renderer:
         screen.blit(hp_surf, (x, y))
         x += hp_surf.get_width() + 20
 
-        # スタミナ（攻撃に足りなければ赤系）
+        # スタミナ（攻撃に足りなければ赤系）。括弧内は1回の攻撃で消費する量。
         st_color = colors.STAMINA if f.can_attack() else colors.STAMINA_LOW
-        st_surf = self.font.render(f"ST: {f.stamina}/{f.max_stamina}", True, st_color)
+        st_surf = self.font.render(
+            f"ST: {f.stamina}/{f.max_stamina}(-{f.attack_stamina_cost})", True, st_color
+        )
         screen.blit(st_surf, (x, y))
         x += st_surf.get_width() + 20
 
@@ -226,10 +285,11 @@ class Renderer:
             mode_label, mode_color = "[移動モード]", (150, 200, 150)
         screen.blit(self.font.render(mode_label, True, mode_color), (x, y))
 
-        # 2段目：レベルと経験値
+        # 2段目：レベル・経験値・実効ステータス（装備込み）
         lv = engine.player.level
         lv_surf = self.font.render(
-            f"Lv.{lv.current_level}   XP: {lv.current_xp}/{lv.experience_to_next_level}",
+            f"Lv.{lv.current_level}  XP:{lv.current_xp}/{lv.experience_to_next_level}"
+            f"   攻撃{f.power} 防御{f.defense}",
             True,
             colors.XP,
         )
