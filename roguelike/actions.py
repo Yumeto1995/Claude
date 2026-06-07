@@ -135,6 +135,63 @@ class PickupAction(Action):
         engine.message_log.add_message(f"{item.name} を拾った。", colors.ITEM)
 
 
+class CampMoveCursorAction(Action):
+    """拠点メニューのカーソルを上下に動かす。"""
+
+    consumes_turn = False
+
+    def __init__(self, delta: int):
+        self.delta = delta
+
+    def perform(self, engine: Engine, entity: Entity) -> None:
+        import crafting
+        if engine.camp_station is None:
+            n = len(crafting.STATIONS) + 1          # 施設＋「戻る」
+        else:
+            n = len(crafting.recipes_for(engine.camp_station)) + 1  # レシピ＋「もどる」
+        engine.camp_cursor = (engine.camp_cursor + self.delta) % n
+
+
+class CampSelectAction(Action):
+    """拠点メニューで現在の項目を決定する。"""
+
+    consumes_turn = False
+
+    def perform(self, engine: Engine, entity: Entity) -> None:
+        import crafting
+        if engine.camp_station is None:
+            # 施設選択メニュー
+            if engine.camp_cursor < len(crafting.STATIONS):
+                engine.camp_station = crafting.STATIONS[engine.camp_cursor]
+                engine.camp_cursor = 0
+            else:
+                engine.in_camp = False  # ダンジョンに戻る
+                engine.message_log.add_message(
+                    "テントをたたんでダンジョンに戻った。", colors.WELCOME
+                )
+        else:
+            # 施設のレシピ画面
+            recipes = crafting.recipes_for(engine.camp_station)
+            if engine.camp_cursor < len(recipes):
+                crafting.try_craft(engine, recipes[engine.camp_cursor])
+            else:
+                engine.camp_station = None  # 施設選択へ戻る
+                engine.camp_cursor = 0
+
+
+class CampBackAction(Action):
+    """拠点メニューで一つ前に戻る（施設→施設選択→ダンジョン）。"""
+
+    consumes_turn = False
+
+    def perform(self, engine: Engine, entity: Entity) -> None:
+        if engine.camp_station is not None:
+            engine.camp_station = None
+            engine.camp_cursor = 0
+        else:
+            engine.in_camp = False
+
+
 class ActionWithDirection(Action):
     """方向 (dx, dy) を持つ行動の共通基底。"""
 

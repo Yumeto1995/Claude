@@ -22,6 +22,10 @@ class Engine:
         self.attack_mode = False     # True なら方向キーで攻撃、False なら移動
         self.inventory_open = False  # 持ち物メニューを開いているか
         self.inventory_category = 0  # 持ち物メニューで選択中の分類タブ
+        # 拠点（魔法のテント）の状態
+        self.in_camp = False
+        self.camp_station = None     # None=施設選択 / Station=その施設のレシピ
+        self.camp_cursor = 0
         # 攻撃モーションの予約 [(entity, dx, dy), ...]。Renderer が取り出して再生する。
         self.pending_animations = []
         self.message_log = MessageLog()
@@ -76,9 +80,15 @@ class Engine:
         dagger = entity_factories.dagger.spawn(0, 0)
         armor = entity_factories.leather_armor.spawn(0, 0)
         proof = entity_factories.adventurers_proof.spawn(0, 0)  # 大切なもの
-        self.player.inventory.items.extend([dagger, armor, proof])
+        tent = entity_factories.magic_tent.spawn(0, 0)          # 大切なもの（拠点へ）
+        self.player.inventory.items.extend([dagger, armor, proof, tent])
         self.player.equipment.weapon = dagger
         self.player.equipment.armor = armor
+        # 合成を試せるよう、素材を少し持たせておく
+        for _ in range(3):
+            self.player.inventory.items.append(
+                entity_factories.slime_shard.spawn(0, 0)
+            )
 
     def item_under_player(self):
         """プレイヤーが乗っている床のアイテムを返す。なければ None。"""

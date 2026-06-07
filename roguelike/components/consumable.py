@@ -59,6 +59,17 @@ class HealingConsumable(Consumable):
         return True
 
 
+class TentConsumable(Consumable):
+    """魔法のテント：使うと拠点（料理・錬金・食料生産）へ移動する。消費されない。"""
+
+    def activate(self, engine: "Engine", consumer: "Entity") -> bool:
+        engine.in_camp = True
+        engine.camp_station = None  # 施設選択メニューから
+        engine.camp_cursor = 0
+        engine.message_log.add_message("魔法のテントを張った。", colors.WELCOME)
+        return False  # アイテムは消費しない
+
+
 class LightningConsumable(Consumable):
     """視界内で最も近い敵に雷ダメージを与える巻物。"""
 

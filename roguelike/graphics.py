@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING, Dict
 import pygame
 
 import colors
+import crafting
 import item_category
 import tile_types
 from components.equippable import EquipmentType
@@ -63,6 +64,8 @@ PLACEHOLDER_COLORS: Dict[str, tuple] = {
     "material": (120, 180, 120),
     "key_item": (240, 210, 90),
     "stairs_down": (120, 220, 255),
+    "tent": (90, 170, 90),
+    "food": (220, 180, 120),
 }
 
 TERRAIN_KEYS = {"floor", "wall"}
@@ -183,10 +186,80 @@ class Renderer:
         if engine.inventory_open:
             self._render_inventory(engine)
 
+        if engine.in_camp:
+            self._render_camp(engine)
+
         if engine.game_over:
             self._render_game_over()
 
         pygame.display.flip()
+
+    def _render_camp(self, engine: "Engine") -> None:
+        """拠点（魔法のテント）の画面。施設選択 → レシピ選択。"""
+        screen = self.screen
+        w = self.view_w * TILE_SIZE
+        h = self.play_h + self.PANEL_HEIGHT
+
+        overlay = pygame.Surface((w, h))
+        overlay.set_alpha(230)
+        overlay.fill((12, 14, 20))
+        screen.blit(overlay, (0, 0))
+
+        x, y = 60, 46
+        screen.blit(self.big_font.render("魔法のテント", True, (255, 230, 120)), (x, y))
+        screen.blit(
+            self.font.render("拠点：料理・アイテム錬金・食料生産", True, (200, 200, 210)),
+            (x, y + 54),
+        )
+
+        list_y = y + 116
+        if engine.camp_station is None:
+            # 施設選択メニュー
+            for i, st in enumerate(crafting.STATIONS):
+                self._camp_line(
+                    x, list_y + i * self.LINE_HEIGHT,
+                    crafting.STATION_LABELS[st], i == engine.camp_cursor, True,
+                )
+            back_i = len(crafting.STATIONS)
+            self._camp_line(
+                x, list_y + back_i * self.LINE_HEIGHT,
+                "ダンジョンに戻る", back_i == engine.camp_cursor, True,
+            )
+        else:
+            # レシピ画面
+            label = crafting.STATION_LABELS[engine.camp_station]
+            screen.blit(
+                self.font.render(f"【{label}】 作れるもの", True, (200, 200, 210)),
+                (x, list_y - self.LINE_HEIGHT),
+            )
+            items = engine.player.inventory.items
+            recipes = crafting.recipes_for(engine.camp_station)
+            for i, r in enumerate(recipes):
+                ok = crafting.can_craft(items, r)
+                text = f"{r.output_name}  ←  {r.input_text}"
+                self._camp_line(
+                    x, list_y + i * self.LINE_HEIGHT, text, i == engine.camp_cursor, ok
+                )
+            back_i = len(recipes)
+            self._camp_line(
+                x, list_y + back_i * self.LINE_HEIGHT,
+                "もどる", back_i == engine.camp_cursor, True,
+            )
+
+        screen.blit(
+            self.font.render("↑↓：選択   Enter：決定   ESC：戻る", True, (150, 150, 160)),
+            (x, h - 40),
+        )
+
+    def _camp_line(self, x: int, y: int, text: str, selected: bool, enabled: bool) -> None:
+        cursor = "▶ " if selected else "    "
+        if not enabled:
+            color = (115, 115, 120)       # 材料不足などで作れない
+        elif selected:
+            color = (255, 230, 120)
+        else:
+            color = (220, 220, 230)
+        self.screen.blit(self.font.render(cursor + text, True, color), (x, y))
 
     def _render_inventory(self, engine: "Engine") -> None:
         """持ち物メニューのオーバーレイ（分類タブ付き）。"""

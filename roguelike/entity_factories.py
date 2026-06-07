@@ -9,6 +9,7 @@ from components.consumable import (
     ConfusionConsumable,
     HealingConsumable,
     LightningConsumable,
+    TentConsumable,
 )
 from components.equipment import Equipment
 from components.equippable import Equippable, EquipmentType
@@ -24,7 +25,7 @@ player = Entity(
     blocks_movement=True,
     fighter=Fighter(hp=30, defense=2, power=5, max_stamina=100),
     level=Level(level_up_base=50, level_up_factor=100),
-    inventory=Inventory(capacity=8),
+    inventory=Inventory(capacity=12),
     equipment=Equipment(),
 )
 
@@ -109,10 +110,34 @@ slime_shard = Entity(
     item_category=ItemCategory.MATERIAL,
 )
 
+# --- 食料（消費アイテム。今はHP回復。将来の満腹度システム用）---
+nuts = Entity(
+    sprite="food",
+    name="木の実",
+    blocks_movement=False,
+    consumable=HealingConsumable(amount=5),
+)
+
+preserved_food = Entity(
+    sprite="food",
+    name="携帯食料",
+    blocks_movement=False,
+    consumable=HealingConsumable(amount=12),
+)
+
 # --- 大切なもの（捨てられない重要アイテム）---
 adventurers_proof = Entity(
     sprite="key_item",
     name="冒険者の証",
     blocks_movement=False,
+    item_category=ItemCategory.KEY,
+)
+
+# 魔法のテント：大切なものだが「使う」と拠点へ移動できる（消費されない）
+magic_tent = Entity(
+    sprite="tent",
+    name="魔法のテント",
+    blocks_movement=False,
+    consumable=TentConsumable(),
     item_category=ItemCategory.KEY,
 )

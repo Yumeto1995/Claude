@@ -8,6 +8,9 @@ import item_category
 from actions import (
     Action,
     BumpAction,
+    CampBackAction,
+    CampMoveCursorAction,
+    CampSelectAction,
     CycleInventoryCategoryAction,
     DescendAction,
     EscapeAction,
@@ -43,6 +46,10 @@ def dispatch_event(event: pygame.event.Event, engine: "Engine") -> Optional[Acti
     if event.type == pygame.KEYDOWN:
         key = event.key
 
+        # 拠点（テント）にいる間は専用の操作
+        if engine.in_camp:
+            return _camp_keys(key, engine)
+
         # 持ち物メニューを開いている間は専用の操作
         if engine.inventory_open:
             return _inventory_keys(key, engine)
@@ -69,6 +76,19 @@ def dispatch_event(event: pygame.event.Event, engine: "Engine") -> Optional[Acti
     return None
 
 
+def _camp_keys(key: int, engine: "Engine") -> Optional[Action]:
+    """拠点メニュー中のキー操作。↑↓で選択、Enterで決定、ESCで戻る。"""
+    if key in (pygame.K_UP, pygame.K_w, pygame.K_k):
+        return CampMoveCursorAction(-1)
+    if key in (pygame.K_DOWN, pygame.K_s, pygame.K_j):
+        return CampMoveCursorAction(1)
+    if key in (pygame.K_RETURN, pygame.K_KP_ENTER):
+        return CampSelectAction()
+    if key == pygame.K_ESCAPE:
+        return CampBackAction()
+    return None
+
+
 def _inventory_keys(key: int, engine: "Engine") -> Optional[Action]:
     """持ち物メニュー中のキー操作。←→で分類切替、a〜で使用/装備、ESC/i で閉じる。"""
     if key in (pygame.K_ESCAPE, pygame.K_i):
@@ -92,7 +112,7 @@ def held_movement_action(engine: "Engine") -> Optional[Action]:
 
     メインループがクールダウンを挟みつつ毎フレーム呼ぶことで連続移動になる。
     """
-    if engine.attack_mode or engine.game_over or engine.inventory_open:
+    if engine.attack_mode or engine.game_over or engine.inventory_open or engine.in_camp:
         return None
     keys = pygame.key.get_pressed()
     for keycode, (dx, dy) in _DIRECTIONS.items():
