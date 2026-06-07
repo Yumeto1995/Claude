@@ -10,7 +10,7 @@ from actions import EscapeAction
 from fov import compute_fov
 from input_handlers import dispatch_event
 from message_log import MessageLog
-from procgen import generate_dungeon
+from procgen import generate_dungeon, nonsafe_connected
 
 
 class Engine:
@@ -45,17 +45,21 @@ class Engine:
         self.current_floor += 1
         # 深いほど敵が増える（上限あり）
         max_monsters = min(2 + (self.current_floor - 1) // 2, 6)
-        self.game_map = generate_dungeon(
-            max_rooms=30,
-            room_min_size=6,
-            room_max_size=10,
-            map_width=self.width,
-            map_height=self.height,
-            max_monsters_per_room=max_monsters,
-            max_items_per_room=1,
-            player=self.player,
-        )
-        farming.grow(self)  # 1階潜るごとに畑の作物が育つ
+        # セーフルームでフロアが分断されない地形になるまで生成し直す
+        for _ in range(20):
+            dungeon = generate_dungeon(
+                max_rooms=30,
+                room_min_size=6,
+                room_max_size=10,
+                map_width=self.width,
+                map_height=self.height,
+                max_monsters_per_room=max_monsters,
+                max_items_per_room=1,
+                player=self.player,
+            )
+            if nonsafe_connected(dungeon):
+                break
+        self.game_map = dungeon
         self.update_fov()   # 視界を計算
 
     def handle_events(self, events: Iterable) -> None:
@@ -72,9 +76,12 @@ class Engine:
         # 死亡後は終了(ESC)以外の操作を受け付けない
         if self.game_over and not isinstance(action, EscapeAction):
             return
+        prev = (self.player.x, self.player.y)
         action.perform(self, self.player)
         # ターンを消費する行動の後だけ敵が動く（モード切替・壁ぶつかりは消費しない）
         if action.consumes_turn and not self.game_over:
+            if (self.player.x, self.player.y) != prev:
+                farming.grow_step(self)  # 1歩あるくと作物が育つ
             if not action.is_attack:
                 self.player.fighter.regenerate_stamina()  # 攻撃以外で回復
             # 満腹度を消費。空腹になった瞬間は警告を出す。

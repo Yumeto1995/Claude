@@ -197,6 +197,10 @@ class MovementAction(ActionWithDirection):
         if engine.game_map.get_blocking_entity_at(dest_x, dest_y):
             self.consumes_turn = False
             return  # 他のエンティティがいる
+        # モンスターはセーフルームに入れない（プレイヤーは入れる）
+        if entity is not engine.player and engine.game_map.safe[dest_x, dest_y]:
+            self.consumes_turn = False
+            return
 
         entity.move(self.dx, self.dy)
 

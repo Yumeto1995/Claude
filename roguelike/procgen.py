@@ -3,6 +3,8 @@ from __future__ import annotations
 import random
 from typing import Iterator, List, Tuple
 
+import numpy as np
+
 import entity_factories
 from entity import Entity
 from game_map import GameMap
@@ -148,8 +150,11 @@ def generate_dungeon(
         dungeon.tiles[new_room.inner] = tile_types.floor
 
         if len(rooms) == 0:
-            # 最初の部屋の中央にプレイヤーを配置（この部屋に敵は置かない）
+            # 最初の部屋＝セーフルーム。プレイヤーを配置し、敵・階段は置かない。
+            # 最初の部屋は接続上「行き止まり（葉）」なので、敵を締め出しても
+            # 階層は分断されない。
             player.x, player.y = new_room.center
+            dungeon.safe[new_room.inner] = True
         else:
             # 直前の部屋と通路でつなぐ
             for x, y in tunnel_between(rooms[-1].center, new_room.center):
@@ -168,3 +173,29 @@ def generate_dungeon(
     dungeon.downstairs_location = center_of_last_room
 
     return dungeon
+
+
+def nonsafe_connected(dungeon: GameMap) -> bool:
+    """セーフルームを除いた床（＝モンスターが動ける範囲）が一つに繋がっているか。
+
+    セーフ化でフロアが分断されていないことの検証に使う。
+    """
+    from collections import deque
+
+    walkable = dungeon.tiles["walkable"] & (~dungeon.safe)
+    total = int(walkable.sum())
+    if total == 0:
+        return True
+
+    w, h = dungeon.width, dungeon.height
+    sx, sy = (int(v) for v in np.argwhere(walkable)[0])
+    seen = {(sx, sy)}
+    dq = deque([(sx, sy)])
+    while dq:
+        x, y = dq.popleft()
+        for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1)):
+            nx, ny = x + dx, y + dy
+            if 0 <= nx < w and 0 <= ny < h and walkable[nx, ny] and (nx, ny) not in seen:
+                seen.add((nx, ny))
+                dq.append((nx, ny))
+    return len(seen) == total

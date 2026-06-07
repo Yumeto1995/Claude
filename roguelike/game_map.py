@@ -28,6 +28,8 @@ class GameMap:
         # 視界の状態
         self.visible = np.full((width, height), False, order="F")   # 今見えている
         self.explored = np.full((width, height), False, order="F")  # 一度でも見た
+        # セーフルーム（モンスター侵入不可・テント使用可）のタイル
+        self.safe = np.full((width, height), False, order="F")
 
     def in_bounds(self, x: int, y: int) -> bool:
         """(x, y) がマップ内なら True。"""

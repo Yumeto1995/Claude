@@ -49,6 +49,7 @@ ASSETS_DIR = os.path.join(os.path.dirname(__file__), "assets")
 # スプライトのキー → 仮タイルの色（assets に PNG が無いとき使う）
 PLACEHOLDER_COLORS: Dict[str, tuple] = {
     "floor": (40, 40, 60),
+    "safe_floor": (40, 70, 70),
     "wall": (90, 75, 55),
     "player": (255, 255, 255),
     "goblin": (80, 200, 80),
@@ -161,6 +162,8 @@ class Renderer:
                     key = "wall"
                 elif sprite_id == tile_types.SPRITE_DOWNSTAIRS:
                     key = "stairs_down"
+                elif gm.safe[wx, wy]:
+                    key = "safe_floor"
                 else:
                     key = "floor"
                 pos = (sx * TILE_SIZE, sy * TILE_SIZE)
@@ -384,6 +387,9 @@ class Renderer:
             if foot is not None:
                 hint_text = f"足元: {foot.name}（G で拾う）"
                 hint_color = colors.ITEM
+            elif engine.game_map.safe[engine.player.x, engine.player.y]:
+                hint_text = "セーフルーム（テントが使える・敵が入れない）"
+                hint_color = colors.HEAL
         if hint_text:
             hint = self.font.render(hint_text, True, hint_color)
             screen.blit(hint, (width - hint.get_width() - 10, y + self.LINE_HEIGHT))

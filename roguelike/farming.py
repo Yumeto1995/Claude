@@ -16,11 +16,11 @@ if TYPE_CHECKING:
 
 NUM_PLOTS = 4
 
-# 種名 → (育つ食材テンプレート, 収穫までに潜る階数)
+# 種名 → (育つ食材テンプレート, 収穫までに歩く歩数)
 SEEDS = {
-    "木の実の種": (ef.nuts, 2),
-    "薬草の種": (ef.herb, 2),
-    "キノコの種": (ef.mushroom, 3),
+    "木の実の種": (ef.nuts, 60),
+    "薬草の種": (ef.herb, 60),
+    "キノコの種": (ef.mushroom, 90),
 }
 
 
@@ -41,7 +41,7 @@ def has_empty_plot(engine: "Engine") -> bool:
 
 
 def has_ready(engine: "Engine") -> bool:
-    return any(p is not None and p["floors_left"] <= 0 for p in engine.farm_plots)
+    return any(p is not None and p["steps_left"] <= 0 for p in engine.farm_plots)
 
 
 def plant(engine: "Engine", seed_name: str) -> None:
@@ -52,14 +52,14 @@ def plant(engine: "Engine", seed_name: str) -> None:
                 if it.name == seed_name:
                     inv.remove(it)
                     break
-            output, floors = SEEDS[seed_name]
+            output, steps = SEEDS[seed_name]
             engine.farm_plots[i] = {
                 "name": output.name,
                 "template": output,
-                "floors_left": floors,
+                "steps_left": steps,
             }
             engine.message_log.add_message(
-                f"{seed_name} を植えた（{floors}階潜ると育つ）。", colors.ITEM
+                f"{seed_name} を植えた（{steps}歩 歩くと育つ）。", colors.ITEM
             )
             return
 
@@ -68,7 +68,7 @@ def harvest(engine: "Engine") -> None:
     inv = engine.player.inventory.items
     harvested = 0
     for i, plot in enumerate(engine.farm_plots):
-        if plot is not None and plot["floors_left"] <= 0:
+        if plot is not None and plot["steps_left"] <= 0:
             inv.append(plot["template"].spawn(0, 0))
             engine.message_log.add_message(f"{plot['name']} を収穫した。", colors.ITEM)
             engine.farm_plots[i] = None
@@ -77,11 +77,11 @@ def harvest(engine: "Engine") -> None:
         engine.message_log.add_message("収穫できる作物がない。", colors.NO_EFFECT)
 
 
-def grow(engine: "Engine") -> None:
-    """1階潜るごとに作物を成長させる（engine.generate_floor から呼ぶ）。"""
+def grow_step(engine: "Engine") -> None:
+    """プレイヤーが1歩あるくごとに作物を成長させる。"""
     for plot in engine.farm_plots:
-        if plot is not None and plot["floors_left"] > 0:
-            plot["floors_left"] -= 1
+        if plot is not None and plot["steps_left"] > 0:
+            plot["steps_left"] -= 1
 
 
 def plot_status_lines(engine: "Engine") -> List[str]:
@@ -89,8 +89,8 @@ def plot_status_lines(engine: "Engine") -> List[str]:
     for i, plot in enumerate(engine.farm_plots):
         if plot is None:
             lines.append(f"畑{i + 1}: 空き")
-        elif plot["floors_left"] <= 0:
+        elif plot["steps_left"] <= 0:
             lines.append(f"畑{i + 1}: {plot['name']} 収穫できる！")
         else:
-            lines.append(f"畑{i + 1}: {plot['name']}（あと{plot['floors_left']}階）")
+            lines.append(f"畑{i + 1}: {plot['name']}（あと{plot['steps_left']}歩）")
     return lines

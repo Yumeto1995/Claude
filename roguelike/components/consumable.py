@@ -113,6 +113,11 @@ class TentConsumable(Consumable):
     """魔法のテント：使うと拠点（料理・錬金・食料生産）へ移動する。消費されない。"""
 
     def activate(self, engine: "Engine", consumer: "Entity") -> bool:
+        if not engine.game_map.safe[consumer.x, consumer.y]:
+            engine.message_log.add_message(
+                "ここではテントを張れない。セーフルームでだけ使える。", colors.NO_EFFECT
+            )
+            return False
         engine.in_camp = True
         engine.camp_screen = "main"  # 施設選択メニューから
         engine.camp_cursor = 0
