@@ -1,12 +1,12 @@
 # Roguelike（仮）
 
-Python + [tcod](https://python-tcod.readthedocs.io/) で作る、風来のシレン系ローグライク。
+Python + [pygame](https://www.pygame.org/) で作る、風来のシレン系ローグライク。
 将来的に **敵AIへ強化学習を導入**し、**Steam公開**を目指す。
 
 ## 必要環境
 
 - Python 3.9+
-- 依存ライブラリ：`pip3 install -r requirements.txt`（tcod, numpy）
+- 依存ライブラリ：`pip3 install -r requirements.txt`（pygame, numpy）
 
 ## 実行
 
@@ -18,30 +18,39 @@ python3 main.py
 
 | キー | 動作 |
 |------|------|
-| 矢印キー | 移動（敵に向かって移動すると攻撃） |
+| 矢印キー / WASD / hjkl | 移動（敵に向かって移動すると攻撃） |
 | ESC | 終了 |
+
+## 画像素材
+
+`assets/` に PNG を置くと自動で読み込む。無いものは仮タイル（単色）で代用。
+必要なファイル名は [assets/README.md](assets/README.md) を参照。
 
 ## モジュール構成
 
 | ファイル | 役割 |
 |----------|------|
-| `main.py` | 起動（エントリーポイント） |
-| `engine.py` | ゲーム状態の保持・ターン処理・描画の司令塔 |
+| `main.py` | 起動・メインループ（pygame） |
+| `engine.py` | ゲーム状態の保持・ターン処理の司令塔 |
+| `graphics.py` | 描画（カメラ追従・タイル画像の読み込み） |
+| `input_handlers.py` | pygame入力 → Action への変換 |
 | `entity.py` | プレイヤー/敵/アイテムの共通クラス（テンプレート複製対応） |
 | `entity_factories.py` | 敵・プレイヤーの定義集（ステータス調整はここ） |
 | `actions.py` | 行動（移動・攻撃・ぶつかり判定）をデータとして表現 |
-| `input_handlers.py` | キー入力 → Action への変換 |
 | `tile_types.py` | 床・壁などタイルの定義 |
-| `game_map.py` | マップ配列とエンティティの保持・描画 |
+| `game_map.py` | マップ配列とエンティティの保持 |
 | `procgen.py` | ランダムダンジョン生成・敵配置 |
+| `pathfinding.py` | A*経路探索・Bresenham（純Python実装） |
 | `components/ai.py` | 敵の頭脳（経路探索AI。★RLの差し替え地点） |
 | `components/fighter.py` | 戦闘ステータス（HP・攻撃力・防御力） |
 
 ## ロードマップ
 
 - [x] マップ生成 / 移動 / 衝突判定
-- [x] 敵の配置 / ターン制AI（経路探索）
+- [x] 敵の配置 / ターン制AI（A*でプレイヤー追跡）
 - [x] 戦闘（HP・ダメージ・撃破）
+- [x] pygame描画・カメラ・画像タイル対応
+- [ ] 自作PNG画像の作成・差し替え
 - [ ] メッセージログ（戦闘表示を画面内へ）
 - [ ] 視界（FOV）
 - [ ] アイテム（拾う・使う）
@@ -53,4 +62,4 @@ python3 main.py
 
 - `components/ai.py` の `HostileEnemy.perform()` が敵の行動決定。**ここをRLの方策に差し替える**のが最終目標。
 - `engine.handle_enemy_turns()` がRL環境の `step()` に相当。
-- `engine.render()` を呼ばなければ **headless（画面なし）で高速に学習**できる。
+- 学習時は `graphics.Renderer` を使わず（描画なしで）ループを回せば高速にシミュレートできる。

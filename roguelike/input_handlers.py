@@ -1,30 +1,28 @@
 from __future__ import annotations
 
-import tcod.event
+from typing import Optional
+
+import pygame
 
 from actions import Action, BumpAction, EscapeAction
 
 
-class EventHandler(tcod.event.EventDispatch[Action]):
-    """tcod のイベントを Action に変換する。描画と入力をここに集約する。"""
-
-    def ev_quit(self, event: tcod.event.Quit) -> Action | None:
+def dispatch_event(event: pygame.event.Event) -> Optional[Action]:
+    """pygame のイベントを Action に変換する。該当しなければ None。"""
+    if event.type == pygame.QUIT:
         raise SystemExit()
 
-    def ev_keydown(self, event: tcod.event.KeyDown) -> Action | None:
-        action: Action | None = None
-        key = event.sym
+    if event.type == pygame.KEYDOWN:
+        key = event.key
+        if key in (pygame.K_UP, pygame.K_w, pygame.K_k):
+            return BumpAction(dx=0, dy=-1)
+        elif key in (pygame.K_DOWN, pygame.K_s, pygame.K_j):
+            return BumpAction(dx=0, dy=1)
+        elif key in (pygame.K_LEFT, pygame.K_a, pygame.K_h):
+            return BumpAction(dx=-1, dy=0)
+        elif key in (pygame.K_RIGHT, pygame.K_d, pygame.K_l):
+            return BumpAction(dx=1, dy=0)
+        elif key == pygame.K_ESCAPE:
+            return EscapeAction()
 
-        if key == tcod.event.KeySym.UP:
-            action = BumpAction(dx=0, dy=-1)
-        elif key == tcod.event.KeySym.DOWN:
-            action = BumpAction(dx=0, dy=1)
-        elif key == tcod.event.KeySym.LEFT:
-            action = BumpAction(dx=-1, dy=0)
-        elif key == tcod.event.KeySym.RIGHT:
-            action = BumpAction(dx=1, dy=0)
-        elif key == tcod.event.KeySym.ESCAPE:
-            action = EscapeAction()
-
-        # 該当キーがなければ None（何もしない）
-        return action
+    return None

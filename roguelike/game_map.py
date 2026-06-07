@@ -3,7 +3,6 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, List, Optional
 
 import numpy as np
-import tcod
 
 import tile_types
 
@@ -12,7 +11,10 @@ if TYPE_CHECKING:
 
 
 class GameMap:
-    """ダンジョン1フロア分のタイル配列と、そこにいる全エンティティを保持する。"""
+    """ダンジョン1フロア分のタイル配列と、そこにいる全エンティティを保持する。
+
+    描画は graphics.Renderer が担当する（このクラスはデータだけを持つ）。
+    """
 
     def __init__(self, width: int, height: int):
         self.width = width
@@ -32,11 +34,3 @@ class GameMap:
             if entity.blocks_movement and entity.x == x and entity.y == y:
                 return entity
         return None
-
-    def render(self, console: tcod.Console) -> None:
-        # まずタイル（床・壁）を一括描画
-        console.rgb[0 : self.width, 0 : self.height] = self.tiles["dark"]
-        # その上にエンティティを描画。死体・アイテム（すり抜け可）を先に、
-        # 生きている者（すり抜け不可）を後に描いて重なり順を正す。
-        for entity in sorted(self.entities, key=lambda e: e.blocks_movement):
-            console.print(entity.x, entity.y, entity.char, fg=entity.color)

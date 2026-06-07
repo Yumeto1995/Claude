@@ -3,11 +3,10 @@ from __future__ import annotations
 import random
 from typing import Iterator, List, Tuple
 
-import tcod
-
 import entity_factories
 from entity import Entity
 from game_map import GameMap
+from pathfinding import bresenham
 import tile_types
 
 
@@ -54,10 +53,10 @@ def tunnel_between(
         # 先に縦、次に横
         corner_x, corner_y = x1, y2
 
-    # tcod の bresenham で直線上の格子点を得る
-    for x, y in tcod.los.bresenham((x1, y1), (corner_x, corner_y)).tolist():
+    # bresenham で直線上の格子点を得る
+    for x, y in bresenham((x1, y1), (corner_x, corner_y)):
         yield x, y
-    for x, y in tcod.los.bresenham((corner_x, corner_y), (x2, y2)).tolist():
+    for x, y in bresenham((corner_x, corner_y), (x2, y2)):
         yield x, y
 
 

@@ -3,9 +3,9 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, List, Tuple
 
 import numpy as np
-import tcod
 
 from actions import MeleeAction, MovementAction
+from pathfinding import find_path
 
 if TYPE_CHECKING:
     from engine import Engine
@@ -38,14 +38,8 @@ class BaseAI:
             if entity.blocks_movement and cost[entity.x, entity.y]:
                 cost[entity.x, entity.y] += 10
 
-        # 4方向移動（diagonal=0 で斜め移動を無効化）
-        graph = tcod.path.SimpleGraph(cost=cost, cardinal=2, diagonal=0)
-        pathfinder = tcod.path.Pathfinder(graph)
-        pathfinder.add_root((self.entity.x, self.entity.y))  # 出発点
-
-        # 経路（始点を除く）を [(x, y), ...] で返す
-        path = pathfinder.path_to((dest_x, dest_y))[1:].tolist()
-        return [(x, y) for x, y in path]
+        # A* で経路（始点を除く）を [(x, y), ...] で求める
+        return find_path(cost, (self.entity.x, self.entity.y), (dest_x, dest_y))
 
 
 class HostileEnemy(BaseAI):

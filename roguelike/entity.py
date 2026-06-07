@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import copy
-from typing import TYPE_CHECKING, Optional, Tuple, Type
+from typing import TYPE_CHECKING, Optional, Type
 
 if TYPE_CHECKING:
     from components.ai import BaseAI
@@ -19,8 +19,7 @@ class Entity:
         self,
         x: int = 0,
         y: int = 0,
-        char: str = "?",
-        color: Tuple[int, int, int] = (255, 255, 255),
+        sprite: str = "player",
         name: str = "<未設定>",
         blocks_movement: bool = False,
         ai_cls: Optional[Type["BaseAI"]] = None,
@@ -28,8 +27,7 @@ class Entity:
     ):
         self.x = x
         self.y = y
-        self.char = char
-        self.color = color
+        self.sprite = sprite  # 描画に使うスプライトのキー（graphics.py で画像に対応）
         self.name = name
         self.blocks_movement = blocks_movement  # True なら他者がすり抜けられない
         # AI を持つエンティティ（＝敵）はここに行動ロジックが入る。

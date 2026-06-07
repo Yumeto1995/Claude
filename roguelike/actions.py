@@ -82,9 +82,8 @@ class MeleeAction(ActionWithDirection):
             target.ai = None                 # もう動かない
             target.blocks_movement = False   # 死体はすり抜けられる
             target.name = f"{target.name}の死体"
-        # 共通：見た目を死体（赤い %）に
-        target.char = "%"
-        target.color = (191, 0, 0)
+        # 共通：見た目を死体スプライトに
+        target.sprite = "corpse"
 
 
 class BumpAction(ActionWithDirection):

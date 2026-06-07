@@ -1,21 +1,20 @@
 from __future__ import annotations
 
-import tcod
+from typing import Iterable
 
 import entity_factories
 from actions import EscapeAction
-from input_handlers import EventHandler
+from input_handlers import dispatch_event
 from procgen import generate_dungeon
 
 
 class Engine:
-    """ゲーム状態を保持し、入力→更新→描画の流れを束ねる。"""
+    """ゲーム状態を保持し、入力→更新の流れを束ねる。描画は graphics.Renderer。"""
 
     def __init__(self, width: int, height: int):
         self.width = width
         self.height = height
         self.game_over = False
-        self.event_handler = EventHandler()
         # プレイヤーはテンプレートから複製して用意（位置は生成時に決まる）
         self.player = entity_factories.player.spawn(0, 0)
         # ランダムダンジョンを生成（プレイヤー位置・敵配置もこの中で行う）
@@ -29,9 +28,9 @@ class Engine:
             player=self.player,
         )
 
-    def handle_events(self, events) -> None:
+    def handle_events(self, events: Iterable) -> None:
         for event in events:
-            action = self.event_handler.dispatch(event)
+            action = dispatch_event(event)
             if action is None:
                 continue
             # 死亡後は終了(ESC)以外の操作を受け付けない
@@ -48,13 +47,3 @@ class Engine:
                 break  # プレイヤーが倒れたら残りの敵は動かさない
             if entity.ai is not None:
                 entity.ai.perform(self)
-
-    def render(self, console: tcod.Console, context) -> None:
-        console.clear()
-        self.game_map.render(console)  # タイルとエンティティをまとめて描画
-        # プレイヤーのHPを左下に表示
-        fighter = self.player.fighter
-        console.print(
-            1, self.height - 1, f"HP: {fighter.hp}/{fighter.max_hp}", fg=(255, 255, 255)
-        )
-        context.present(console)

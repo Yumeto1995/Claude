@@ -1,24 +1,29 @@
-import tcod
+import pygame
 
 from engine import Engine
+from graphics import Renderer
 
-SCREEN_WIDTH = 80
-SCREEN_HEIGHT = 50
+MAP_WIDTH = 80
+MAP_HEIGHT = 50
+VIEW_W = 24  # 画面に映すタイル数（横）
+VIEW_H = 17  # 画面に映すタイル数（縦）
 
 
 def main():
-    engine = Engine(width=SCREEN_WIDTH, height=SCREEN_HEIGHT)
+    pygame.init()
+    engine = Engine(MAP_WIDTH, MAP_HEIGHT)
+    renderer = Renderer(VIEW_W, VIEW_H)
+    clock = pygame.time.Clock()
 
-    with tcod.context.new(
-        columns=SCREEN_WIDTH,
-        rows=SCREEN_HEIGHT,
-        title="Roguelike",
-    ) as context:
-        console = tcod.Console(SCREEN_WIDTH, SCREEN_HEIGHT, order="F")
-
+    try:
         while True:
-            engine.render(console, context)
-            engine.handle_events(tcod.event.wait())
+            renderer.render(engine)
+            engine.handle_events(pygame.event.get())
+            clock.tick(30)  # 最大30fps（ターン制なので入力時のみ進む）
+    except SystemExit:
+        pass
+    finally:
+        pygame.quit()
 
 
 if __name__ == "__main__":

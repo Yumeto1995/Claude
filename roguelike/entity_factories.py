@@ -1,4 +1,7 @@
-"""エンティティのテンプレート集。ここを増やせば敵やアイテムの種類が増える。"""
+"""エンティティのテンプレート集。ここを増やせば敵やアイテムの種類が増える。
+
+sprite は assets/<sprite>.png に対応する。画像が無ければ graphics.py が仮タイルを生成する。
+"""
 from __future__ import annotations
 
 from components.ai import HostileEnemy
@@ -6,16 +9,14 @@ from components.fighter import Fighter
 from entity import Entity
 
 player = Entity(
-    char="@",
-    color=(255, 255, 255),
+    sprite="player",
     name="プレイヤー",
     blocks_movement=True,
     fighter=Fighter(hp=30, defense=2, power=5),
 )
 
 goblin = Entity(
-    char="g",
-    color=(63, 127, 63),
+    sprite="goblin",
     name="ゴブリン",
     blocks_movement=True,
     ai_cls=HostileEnemy,
@@ -23,8 +24,7 @@ goblin = Entity(
 )
 
 slime = Entity(
-    char="s",
-    color=(63, 127, 127),
+    sprite="slime",
     name="スライム",
     blocks_movement=True,
     ai_cls=HostileEnemy,
