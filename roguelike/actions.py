@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING
 import colors
 import combat
 import item_category
+from components.fighter import HUNGER_DAMAGE_MULT
 
 if TYPE_CHECKING:
     from engine import Engine
@@ -144,12 +145,8 @@ class CampMoveCursorAction(Action):
         self.delta = delta
 
     def perform(self, engine: Engine, entity: Entity) -> None:
-        import crafting
-        if engine.camp_station is None:
-            n = len(crafting.STATIONS) + 1          # 施設＋「戻る」
-        else:
-            n = len(crafting.recipes_for(engine.camp_station)) + 1  # レシピ＋「もどる」
-        engine.camp_cursor = (engine.camp_cursor + self.delta) % n
+        import camp
+        camp.move_cursor(engine, self.delta)
 
 
 class CampSelectAction(Action):
@@ -158,38 +155,18 @@ class CampSelectAction(Action):
     consumes_turn = False
 
     def perform(self, engine: Engine, entity: Entity) -> None:
-        import crafting
-        if engine.camp_station is None:
-            # 施設選択メニュー
-            if engine.camp_cursor < len(crafting.STATIONS):
-                engine.camp_station = crafting.STATIONS[engine.camp_cursor]
-                engine.camp_cursor = 0
-            else:
-                engine.in_camp = False  # ダンジョンに戻る
-                engine.message_log.add_message(
-                    "テントをたたんでダンジョンに戻った。", colors.WELCOME
-                )
-        else:
-            # 施設のレシピ画面
-            recipes = crafting.recipes_for(engine.camp_station)
-            if engine.camp_cursor < len(recipes):
-                crafting.try_craft(engine, recipes[engine.camp_cursor])
-            else:
-                engine.camp_station = None  # 施設選択へ戻る
-                engine.camp_cursor = 0
+        import camp
+        camp.select(engine)
 
 
 class CampBackAction(Action):
-    """拠点メニューで一つ前に戻る（施設→施設選択→ダンジョン）。"""
+    """拠点メニューで一つ前に戻る。"""
 
     consumes_turn = False
 
     def perform(self, engine: Engine, entity: Entity) -> None:
-        if engine.camp_station is not None:
-            engine.camp_station = None
-            engine.camp_cursor = 0
-        else:
-            engine.in_camp = False
+        import camp
+        camp.back(engine)
 
 
 class ActionWithDirection(Action):
@@ -250,6 +227,8 @@ class MeleeAction(ActionWithDirection):
             return
 
         damage = entity.fighter.power - target.fighter.defense
+        if damage > 0 and target.fighter.is_hungry:
+            damage = int(damage * HUNGER_DAMAGE_MULT)  # 空腹だと受けるダメージ増
         attack_color = colors.PLAYER_ATK if entity is engine.player else colors.ENEMY_ATK
         desc = f"{entity.name} が {target.name} を攻撃"
         if damage > 0:

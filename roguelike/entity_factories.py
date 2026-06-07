@@ -7,10 +7,13 @@ from __future__ import annotations
 from components.ai import HostileEnemy
 from components.consumable import (
     ConfusionConsumable,
+    FoodConsumable,
+    FoodDishConsumable,
     HealingConsumable,
     LightningConsumable,
     TentConsumable,
 )
+from status import StatusEffect
 from components.equipment import Equipment
 from components.equippable import Equippable, EquipmentType
 from components.fighter import Fighter
@@ -23,7 +26,7 @@ player = Entity(
     sprite="player",
     name="プレイヤー",
     blocks_movement=True,
-    fighter=Fighter(hp=30, defense=2, power=5, max_stamina=100),
+    fighter=Fighter(hp=30, defense=2, power=5, max_stamina=100, max_satiety=100),
     level=Level(level_up_base=50, level_up_factor=100),
     inventory=Inventory(capacity=12),
     equipment=Equipment(),
@@ -110,19 +113,58 @@ slime_shard = Entity(
     item_category=ItemCategory.MATERIAL,
 )
 
-# --- 食料（消費アイテム。今はHP回復。将来の満腹度システム用）---
+# --- 食料・食材（消費アイテム。満腹度を回復し、料理の材料にもなる）---
 nuts = Entity(
-    sprite="food",
-    name="木の実",
-    blocks_movement=False,
-    consumable=HealingConsumable(amount=5),
+    sprite="food", name="木の実", blocks_movement=False,
+    consumable=FoodConsumable(amount=25),
+)
+preserved_food = Entity(
+    sprite="food", name="携帯食料", blocks_movement=False,
+    consumable=FoodConsumable(amount=50),
+)
+herb = Entity(
+    sprite="food", name="薬草", blocks_movement=False,
+    consumable=FoodConsumable(amount=15),
+)
+mushroom = Entity(
+    sprite="food", name="キノコ", blocks_movement=False,
+    consumable=FoodConsumable(amount=15),
 )
 
-preserved_food = Entity(
-    sprite="food",
-    name="携帯食料",
-    blocks_movement=False,
-    consumable=HealingConsumable(amount=12),
+# --- 種（素材。拠点の畑に植えると、階を潜るうちに食材が育つ）---
+nut_seed = Entity(
+    sprite="seed", name="木の実の種", blocks_movement=False,
+    item_category=ItemCategory.MATERIAL,
+)
+herb_seed = Entity(
+    sprite="seed", name="薬草の種", blocks_movement=False,
+    item_category=ItemCategory.MATERIAL,
+)
+mushroom_seed = Entity(
+    sprite="seed", name="キノコの種", blocks_movement=False,
+    item_category=ItemCategory.MATERIAL,
+)
+
+# --- 料理（消費アイテム。満腹度回復＋一時バフ。料理で作る）---
+power_dish = Entity(
+    sprite="dish", name="ちからの料理", blocks_movement=False,
+    consumable=FoodDishConsumable(
+        satiety=40, effect=StatusEffect("ちから+3", turns=25, power_bonus=3)
+    ),
+)
+guard_dish = Entity(
+    sprite="dish", name="まもりの料理", blocks_movement=False,
+    consumable=FoodDishConsumable(
+        satiety=40, effect=StatusEffect("まもり+3", turns=25, defense_bonus=3)
+    ),
+)
+vigor_dish = Entity(
+    sprite="dish", name="げんきの料理", blocks_movement=False,
+    consumable=FoodDishConsumable(satiety=60, heal=15),
+)
+failed_dish = Entity(
+    sprite="dish", name="失敗作", blocks_movement=False,
+    consumable=FoodDishConsumable(satiety=10),
 )
 
 # --- 大切なもの（捨てられない重要アイテム）---

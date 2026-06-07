@@ -12,8 +12,8 @@ from typing import TYPE_CHECKING, Dict
 
 import pygame
 
+import camp
 import colors
-import crafting
 import item_category
 import tile_types
 from components.equippable import EquipmentType
@@ -66,6 +66,8 @@ PLACEHOLDER_COLORS: Dict[str, tuple] = {
     "stairs_down": (120, 220, 255),
     "tent": (90, 170, 90),
     "food": (220, 180, 120),
+    "seed": (170, 140, 80),
+    "dish": (255, 170, 90),
 }
 
 TERRAIN_KEYS = {"floor", "wall"}
@@ -195,55 +197,31 @@ class Renderer:
         pygame.display.flip()
 
     def _render_camp(self, engine: "Engine") -> None:
-        """拠点（魔法のテント）の画面。施設選択 → レシピ選択。"""
+        """拠点（魔法のテント）の画面。camp モジュールの状態に従って描く。"""
         screen = self.screen
         w = self.view_w * TILE_SIZE
         h = self.play_h + self.PANEL_HEIGHT
 
         overlay = pygame.Surface((w, h))
-        overlay.set_alpha(230)
+        overlay.set_alpha(232)
         overlay.fill((12, 14, 20))
         screen.blit(overlay, (0, 0))
 
-        x, y = 60, 46
-        screen.blit(self.big_font.render("魔法のテント", True, (255, 230, 120)), (x, y))
-        screen.blit(
-            self.font.render("拠点：料理・アイテム錬金・食料生産", True, (200, 200, 210)),
-            (x, y + 54),
-        )
+        x, y = 60, 40
+        screen.blit(self.big_font.render(camp.title(engine), True, (255, 230, 120)), (x, y))
 
-        list_y = y + 116
-        if engine.camp_station is None:
-            # 施設選択メニュー
-            for i, st in enumerate(crafting.STATIONS):
-                self._camp_line(
-                    x, list_y + i * self.LINE_HEIGHT,
-                    crafting.STATION_LABELS[st], i == engine.camp_cursor, True,
-                )
-            back_i = len(crafting.STATIONS)
+        cy = y + 64
+        # 補足情報（畑の状態・発見済み料理など）
+        for line in camp.info(engine):
+            screen.blit(self.font.render(line, True, (175, 180, 190)), (x, cy))
+            cy += self.LINE_HEIGHT
+
+        cy += 8
+        # 選択肢
+        for i, opt in enumerate(camp.options(engine)):
             self._camp_line(
-                x, list_y + back_i * self.LINE_HEIGHT,
-                "ダンジョンに戻る", back_i == engine.camp_cursor, True,
-            )
-        else:
-            # レシピ画面
-            label = crafting.STATION_LABELS[engine.camp_station]
-            screen.blit(
-                self.font.render(f"【{label}】 作れるもの", True, (200, 200, 210)),
-                (x, list_y - self.LINE_HEIGHT),
-            )
-            items = engine.player.inventory.items
-            recipes = crafting.recipes_for(engine.camp_station)
-            for i, r in enumerate(recipes):
-                ok = crafting.can_craft(items, r)
-                text = f"{r.output_name}  ←  {r.input_text}"
-                self._camp_line(
-                    x, list_y + i * self.LINE_HEIGHT, text, i == engine.camp_cursor, ok
-                )
-            back_i = len(recipes)
-            self._camp_line(
-                x, list_y + back_i * self.LINE_HEIGHT,
-                "もどる", back_i == engine.camp_cursor, True,
+                x, cy + i * self.LINE_HEIGHT,
+                opt["text"], i == engine.camp_cursor, opt.get("enabled", True),
             )
 
         screen.blit(
@@ -419,6 +397,23 @@ class Renderer:
             colors.XP,
         )
         screen.blit(lv_surf, (8, y + self.LINE_HEIGHT))
+
+        # 満腹度（空腹なら赤で警告）＋ 一時バフ（料理効果）
+        row1_y = y + self.LINE_HEIGHT
+        sx = 8 + lv_surf.get_width() + 24
+        if f.max_satiety > 0:
+            if f.is_hungry:
+                sat_text, sat_color = "空腹！", (255, 80, 80)
+            else:
+                sat_text = f"満腹:{f.satiety}/{f.max_satiety}"
+                sat_color = colors.STAMINA if f.satiety > 20 else colors.STAMINA_LOW
+            sat_surf = self.font.render(sat_text, True, sat_color)
+            screen.blit(sat_surf, (sx, row1_y))
+            sx += sat_surf.get_width() + 20
+        for eff in engine.player.status_effects:
+            eff_surf = self.font.render(f"{eff.name}({eff.turns})", True, colors.LEVEL_UP)
+            screen.blit(eff_surf, (sx, row1_y))
+            sx += eff_surf.get_width() + 14
 
         # メッセージログ（3段目以降）
         engine.message_log.render(

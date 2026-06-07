@@ -59,13 +59,64 @@ class HealingConsumable(Consumable):
         return True
 
 
+class FoodConsumable(Consumable):
+    """食べると満腹度を回復する食料。"""
+
+    def __init__(self, amount: int):
+        self.amount = amount
+
+    def activate(self, engine: "Engine", consumer: "Entity") -> bool:
+        f = consumer.fighter
+        if f is None or f.max_satiety <= 0:
+            return False
+        if f.satiety >= f.max_satiety:
+            engine.message_log.add_message("満腹で食べられない。", colors.NO_EFFECT)
+            return False
+        restored = f.restore_satiety(self.amount)
+        engine.message_log.add_message(
+            f"{self.entity.name} を食べた。満腹度が {restored} 回復した。", colors.HEAL
+        )
+        return True
+
+
+class FoodDishConsumable(Consumable):
+    """料理：食べると満腹度回復＋（あれば）HP回復・一時バフが付く。"""
+
+    def __init__(self, satiety: int = 0, heal: int = 0, effect=None):
+        self.satiety = satiety
+        self.heal = heal
+        self.effect = effect  # status.StatusEffect のテンプレ or None
+
+    def activate(self, engine: "Engine", consumer: "Entity") -> bool:
+        import copy
+
+        f = consumer.fighter
+        if f is None:
+            return False
+        if self.satiety:
+            f.restore_satiety(self.satiety)
+        if self.heal:
+            f.hp += self.heal
+        if self.effect is not None:
+            consumer.status_effects.append(copy.deepcopy(self.effect))
+            engine.message_log.add_message(
+                f"{self.entity.name} を食べた。{self.effect.name} の効果！", colors.HEAL
+            )
+        else:
+            engine.message_log.add_message(
+                f"{self.entity.name} を食べた。", colors.HEAL
+            )
+        return True
+
+
 class TentConsumable(Consumable):
     """魔法のテント：使うと拠点（料理・錬金・食料生産）へ移動する。消費されない。"""
 
     def activate(self, engine: "Engine", consumer: "Entity") -> bool:
         engine.in_camp = True
-        engine.camp_station = None  # 施設選択メニューから
+        engine.camp_screen = "main"  # 施設選択メニューから
         engine.camp_cursor = 0
+        engine.cook_first = None
         engine.message_log.add_message("魔法のテントを張った。", colors.WELCOME)
         return False  # アイテムは消費しない
 
