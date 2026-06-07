@@ -61,13 +61,28 @@ class Fighter:
 
     @property
     def attack_stamina_cost(self) -> int:
-        """攻撃1回あたりの消費スタミナ。装備武器ごとに異なる（武器なしは既定値）。"""
+        """攻撃1回あたりの消費スタミナ。
+
+        武器の消費（武器なしは既定値）＋ 防具の追加消費（重い防具ほど大）。
+        """
+        cost = DEFAULT_ATTACK_STAMINA_COST
         eq = getattr(self.entity, "equipment", None)
-        if eq is not None and eq.weapon is not None and eq.weapon.equippable is not None:
-            cost = eq.weapon.equippable.stamina_cost
-            if cost is not None:
-                return cost
-        return DEFAULT_ATTACK_STAMINA_COST
+        if eq is not None:
+            weapon = eq.weapon
+            if (
+                weapon is not None
+                and weapon.equippable is not None
+                and weapon.equippable.stamina_cost is not None
+            ):
+                cost = weapon.equippable.stamina_cost
+            armor = eq.armor
+            if (
+                armor is not None
+                and armor.equippable is not None
+                and armor.equippable.stamina_cost is not None
+            ):
+                cost += armor.equippable.stamina_cost  # 防具の重さ分を加算
+        return cost
 
     def can_attack(self) -> bool:
         """攻撃に必要なスタミナがあるか。スタミナ制でなければ常に True。"""

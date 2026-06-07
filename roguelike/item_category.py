@@ -57,3 +57,12 @@ def category_of(item: "Entity") -> ItemCategory:
 def items_in(items: List["Entity"], category: ItemCategory) -> List["Entity"]:
     """items のうち、指定分類のものだけを返す。"""
     return [it for it in items if category_of(it) == category]
+
+
+def is_item(entity: "Entity") -> bool:
+    """拾えるアイテムか（消費・装備・素材/大切なもの のいずれか）。死体や生物は False。"""
+    return (
+        entity.consumable is not None
+        or entity.equippable is not None
+        or entity.item_category is not None
+    )

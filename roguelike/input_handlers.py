@@ -9,8 +9,10 @@ from actions import (
     Action,
     BumpAction,
     CycleInventoryCategoryAction,
+    DescendAction,
     EscapeAction,
     MeleeAction,
+    PickupAction,
     ToggleAttackModeAction,
     ToggleInventoryAction,
     UseItemAction,
@@ -50,6 +52,11 @@ def dispatch_event(event: pygame.event.Event, engine: "Engine") -> Optional[Acti
             dx, dy = _DIRECTIONS[key]
             return MeleeAction(dx, dy)
 
+        # 階段で次の階へ（Enter または > キー）
+        if event.unicode == ">" or key in (pygame.K_RETURN, pygame.K_KP_ENTER):
+            return DescendAction()
+        if key == pygame.K_g:
+            return PickupAction()               # 足元のアイテムを拾う
         if key == pygame.K_z:
             return WaitAction()                 # 足踏み
         if key == pygame.K_SPACE:

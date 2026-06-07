@@ -15,6 +15,7 @@ tile_dt = np.dtype(
 # スプライト番号の割り当て
 SPRITE_FLOOR = 0
 SPRITE_WALL = 1
+SPRITE_DOWNSTAIRS = 2
 
 
 def new_tile(
@@ -26,3 +27,4 @@ def new_tile(
 
 floor = new_tile(walkable=True, transparent=True, sprite=SPRITE_FLOOR)
 wall = new_tile(walkable=False, transparent=False, sprite=SPRITE_WALL)
+down_stairs = new_tile(walkable=True, transparent=True, sprite=SPRITE_DOWNSTAIRS)

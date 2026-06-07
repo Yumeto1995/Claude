@@ -21,6 +21,7 @@ class GameMap:
         self.height = height
         self.entities: List["Entity"] = []
         self.rooms: List[tuple] = []  # 各部屋の (x1, y1, x2, y2)。FOV で使う。
+        self.downstairs_location = (0, 0)  # 下り階段の座標
 
         # 最初は全面を壁にしておき、生成側で部屋・通路を床に掘る
         self.tiles = np.full((width, height), fill_value=tile_types.wall, order="F")

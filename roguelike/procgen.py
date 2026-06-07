@@ -124,6 +124,7 @@ def generate_dungeon(
     dungeon.entities.append(player)  # プレイヤーもマップの住人として登録
 
     rooms: List[RectangularRoom] = []
+    center_of_last_room = (0, 0)
 
     for _ in range(max_rooms):
         room_width = random.randint(room_min_size, room_max_size)
@@ -152,8 +153,13 @@ def generate_dungeon(
             place_entities(new_room, dungeon, max_monsters_per_room)
             place_items(new_room, dungeon, max_items_per_room)
 
+        center_of_last_room = new_room.center
         rooms.append(new_room)
         # FOV 用に部屋の範囲を記録
         dungeon.rooms.append((new_room.x1, new_room.y1, new_room.x2, new_room.y2))
+
+    # 最後の部屋の中央に下り階段を置く
+    dungeon.tiles[center_of_last_room] = tile_types.down_stairs
+    dungeon.downstairs_location = center_of_last_room
 
     return dungeon

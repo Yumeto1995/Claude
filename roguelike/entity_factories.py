@@ -69,34 +69,36 @@ confusion_scroll = Entity(
 )
 
 # --- 武器・防具（装備品）---
+# 武器：素手の消費は30。軽い武器ほど安く、重い武器ほど高い。
 dagger = Entity(
     sprite="dagger",
     name="短剣",
     blocks_movement=False,
-    # 軽い：攻撃力は控えめだがスタミナ消費が少なく、何度も振れる
-    equippable=Equippable(EquipmentType.WEAPON, power_bonus=2, stamina_cost=20),
+    # 軽い：攻撃力控えめだがスタミナ消費が少なく手数で攻める
+    equippable=Equippable(EquipmentType.WEAPON, power_bonus=2, stamina_cost=18),
 )
 
 sword = Entity(
     sprite="sword",
     name="剣",
     blocks_movement=False,
-    # 重い：攻撃力は高いがスタミナ消費が大きく、連続では振れない
-    equippable=Equippable(EquipmentType.WEAPON, power_bonus=4, stamina_cost=45),
+    # 重い：高火力だがスタミナ消費が大きく、連続では振れない
+    equippable=Equippable(EquipmentType.WEAPON, power_bonus=4, stamina_cost=42),
 )
 
+# 防具：stamina_cost は攻撃時の追加消費（重い防具ほど攻撃が重くなる）。
 leather_armor = Entity(
     sprite="leather_armor",
     name="革の鎧",
     blocks_movement=False,
-    equippable=Equippable(EquipmentType.ARMOR, defense_bonus=1),
+    equippable=Equippable(EquipmentType.ARMOR, defense_bonus=1, stamina_cost=2),
 )
 
 chain_mail = Entity(
     sprite="chain_mail",
     name="鎖帷子",
     blocks_movement=False,
-    equippable=Equippable(EquipmentType.ARMOR, defense_bonus=3),
+    equippable=Equippable(EquipmentType.ARMOR, defense_bonus=3, stamina_cost=8),
 )
 
 # --- 素材アイテム（効果なし。将来の合成用などに持っておく）---

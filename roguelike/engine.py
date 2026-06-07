@@ -4,6 +4,7 @@ from typing import Iterable
 
 import colors
 import entity_factories
+import item_category
 from actions import EscapeAction
 from fov import compute_fov
 from input_handlers import dispatch_event
@@ -28,18 +29,25 @@ class Engine:
         # プレイヤーはテンプレートから複製して用意（位置は生成時に決まる）
         self.player = entity_factories.player.spawn(0, 0)
         self._give_starting_equipment()
-        # ランダムダンジョンを生成（プレイヤー位置・敵配置もこの中で行う）
+        self.current_floor = 0
+        self.generate_floor()  # 1階を生成
+
+    def generate_floor(self) -> None:
+        """次のフロアを生成する（プレイヤーのステータス・持ち物は引き継ぐ）。"""
+        self.current_floor += 1
+        # 深いほど敵が増える（上限あり）
+        max_monsters = min(2 + (self.current_floor - 1) // 2, 6)
         self.game_map = generate_dungeon(
             max_rooms=30,
             room_min_size=6,
             room_max_size=10,
-            map_width=width,
-            map_height=height,
-            max_monsters_per_room=2,
+            map_width=self.width,
+            map_height=self.height,
+            max_monsters_per_room=max_monsters,
             max_items_per_room=1,
             player=self.player,
         )
-        self.update_fov()  # 初期視界を計算
+        self.update_fov()  # 視界を計算
 
     def handle_events(self, events: Iterable) -> None:
         for event in events:
@@ -71,6 +79,17 @@ class Engine:
         self.player.inventory.items.extend([dagger, armor, proof])
         self.player.equipment.weapon = dagger
         self.player.equipment.armor = armor
+
+    def item_under_player(self):
+        """プレイヤーが乗っている床のアイテムを返す。なければ None。"""
+        for ent in self.game_map.entities:
+            if (
+                item_category.is_item(ent)
+                and ent.x == self.player.x
+                and ent.y == self.player.y
+            ):
+                return ent
+        return None
 
     def update_fov(self) -> None:
         """プレイヤー位置から視界を再計算し、探索済みに反映する。"""

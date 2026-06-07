@@ -37,6 +37,21 @@ class WaitAction(Action):
         engine.message_log.add_message("その場で待機した。", colors.NO_EFFECT)
 
 
+class DescendAction(Action):
+    """下り階段の上で実行すると次の階へ降りる（ターンは別扱い）。"""
+
+    consumes_turn = False
+
+    def perform(self, engine: Engine, entity: Entity) -> None:
+        if (entity.x, entity.y) == engine.game_map.downstairs_location:
+            engine.generate_floor()
+            engine.message_log.add_message(
+                f"地下 {engine.current_floor} 階に降りた。", colors.DESCEND
+            )
+        else:
+            engine.message_log.add_message("ここには階段がない。", colors.NO_EFFECT)
+
+
 class ToggleAttackModeAction(Action):
     """移動モード ⇄ 攻撃モードを切り替える（ターンは経過しない）。"""
 
@@ -99,22 +114,25 @@ class UseItemAction(Action):
         self.consumes_turn = False
 
 
-def _auto_pickup(engine: Engine, actor: Entity) -> None:
-    """actor が乗っている床のアイテムを1つ拾う（持ち物がいっぱいなら拾わない）。"""
-    inv = actor.inventory
-    for item in list(engine.game_map.entities):
-        if item.consumable is None:
-            continue  # アイテムでない
-        if item.x == actor.x and item.y == actor.y:
-            if len(inv.items) >= inv.capacity:
-                engine.message_log.add_message(
-                    f"持ち物がいっぱいで {item.name} を拾えない。", colors.NO_EFFECT
-                )
-                return
-            engine.game_map.entities.remove(item)
-            inv.items.append(item)
-            engine.message_log.add_message(f"{item.name} を拾った。", colors.ITEM)
+class PickupAction(Action):
+    """足元のアイテムを拾う（G キー）。要らなければ拾わずに通り過ぎられる。"""
+
+    def perform(self, engine: Engine, entity: Entity) -> None:
+        item = engine.item_under_player()
+        if item is None:
+            engine.message_log.add_message("足元には何もない。", colors.NO_EFFECT)
+            self.consumes_turn = False
             return
+        inv = entity.inventory
+        if inv is None or len(inv.items) >= inv.capacity:
+            engine.message_log.add_message(
+                f"持ち物がいっぱいで {item.name} を拾えない。", colors.NO_EFFECT
+            )
+            self.consumes_turn = False
+            return
+        engine.game_map.entities.remove(item)
+        inv.items.append(item)
+        engine.message_log.add_message(f"{item.name} を拾った。", colors.ITEM)
 
 
 class ActionWithDirection(Action):
@@ -147,9 +165,6 @@ class MovementAction(ActionWithDirection):
             return  # 他のエンティティがいる
 
         entity.move(self.dx, self.dy)
-        # 持ち物を持つ者（＝プレイヤー）が乗った床のアイテムを自動取得
-        if entity.inventory is not None:
-            _auto_pickup(engine, entity)
 
 
 class MeleeAction(ActionWithDirection):

@@ -15,6 +15,7 @@ import pygame
 import colors
 import item_category
 import tile_types
+from components.equippable import EquipmentType
 
 if TYPE_CHECKING:
     from engine import Engine
@@ -61,6 +62,7 @@ PLACEHOLDER_COLORS: Dict[str, tuple] = {
     "chain_mail": (150, 160, 180),
     "material": (120, 180, 120),
     "key_item": (240, 210, 90),
+    "stairs_down": (120, 220, 255),
 }
 
 TERRAIN_KEYS = {"floor", "wall"}
@@ -150,7 +152,12 @@ class Renderer:
                 if not gm.in_bounds(wx, wy):
                     continue
                 sprite_id = gm.tiles["sprite"][wx, wy]
-                key = "wall" if sprite_id == tile_types.SPRITE_WALL else "floor"
+                if sprite_id == tile_types.SPRITE_WALL:
+                    key = "wall"
+                elif sprite_id == tile_types.SPRITE_DOWNSTAIRS:
+                    key = "stairs_down"
+                else:
+                    key = "floor"
                 pos = (sx * TILE_SIZE, sy * TILE_SIZE)
                 if gm.visible[wx, wy]:
                     screen.blit(self.sprites[key], pos)
@@ -243,7 +250,11 @@ class Renderer:
         if eq.defense_bonus:
             parts.append(f"防+{eq.defense_bonus}")
         if eq.stamina_cost is not None:
-            parts.append(f"ST{eq.stamina_cost}")
+            # 武器=その攻撃の消費、防具=攻撃時の追加消費（+表記）
+            if eq.equipment_type == EquipmentType.ARMOR:
+                parts.append(f"ST+{eq.stamina_cost}")
+            else:
+                parts.append(f"ST{eq.stamina_cost}")
         return "  (" + " ".join(parts) + ")" if parts else ""
 
     @staticmethod
@@ -305,6 +316,26 @@ class Renderer:
         else:
             mode_label, mode_color = "[移動モード]", (150, 200, 150)
         screen.blit(self.font.render(mode_label, True, mode_color), (x, y))
+
+        # 階層表示（右寄せ）
+        floor_surf = self.font.render(
+            f"地下 {engine.current_floor} 階", True, colors.DESCEND
+        )
+        screen.blit(floor_surf, (width - floor_surf.get_width() - 10, y))
+
+        # 文脈ヒント（右下）：階段の上なら降りる案内、足元にアイテムなら拾う案内
+        hint_text = None
+        hint_color = colors.DESCEND
+        if (engine.player.x, engine.player.y) == engine.game_map.downstairs_location:
+            hint_text = "▼ Enter で次の階へ"
+        else:
+            foot = engine.item_under_player()
+            if foot is not None:
+                hint_text = f"足元: {foot.name}（G で拾う）"
+                hint_color = colors.ITEM
+        if hint_text:
+            hint = self.font.render(hint_text, True, hint_color)
+            screen.blit(hint, (width - hint.get_width() - 10, y + self.LINE_HEIGHT))
 
         # 2段目：レベル・経験値・実効ステータス（装備込み）
         lv = engine.player.level
