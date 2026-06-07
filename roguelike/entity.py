@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING, Optional, Type
 if TYPE_CHECKING:
     from components.ai import BaseAI
     from components.fighter import Fighter
+    from components.level import Level
 
 
 class Entity:
@@ -24,6 +25,7 @@ class Entity:
         blocks_movement: bool = False,
         ai_cls: Optional[Type["BaseAI"]] = None,
         fighter: Optional["Fighter"] = None,
+        level: Optional["Level"] = None,
     ):
         self.x = x
         self.y = y
@@ -37,6 +39,10 @@ class Entity:
         self.fighter = fighter
         if self.fighter is not None:
             self.fighter.entity = self  # コンポーネントから所有者を辿れるように
+        # 経験値・レベル。プレイヤーは蓄積用、敵は xp_given 提供用。
+        self.level = level
+        if self.level is not None:
+            self.level.entity = self
 
     def spawn(self, x: int, y: int) -> "Entity":
         """このテンプレートの複製を (x, y) に作って返す。"""

@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 import colors
+from components.level import HP_PER_LEVEL, POWER_PER_LEVEL
 
 if TYPE_CHECKING:
     from engine import Engine
@@ -64,11 +65,15 @@ class MovementAction(ActionWithDirection):
         dest_x = entity.x + self.dx
         dest_y = entity.y + self.dy
 
+        # 進めない場合はターンを消費しない（長押しで壁に詰まっても時間が進まない）
         if not engine.game_map.in_bounds(dest_x, dest_y):
+            self.consumes_turn = False
             return  # マップ外
         if not engine.game_map.tiles["walkable"][dest_x, dest_y]:
+            self.consumes_turn = False
             return  # 壁
         if engine.game_map.get_blocking_entity_at(dest_x, dest_y):
+            self.consumes_turn = False
             return  # 他のエンティティがいる
 
         entity.move(self.dx, self.dy)
@@ -88,6 +93,8 @@ class MeleeAction(ActionWithDirection):
         # 攻撃モーション成立：スタミナを消費（空振りでも消費する）
         if entity.fighter is not None:
             entity.fighter.spend_attack_stamina()
+        # 攻撃方向への踏み込みアニメを予約（命中・空振り問わず）
+        engine.pending_animations.append((entity, self.dx, self.dy))
 
         dest_x = entity.x + self.dx
         dest_y = entity.y + self.dy
@@ -109,6 +116,34 @@ class MeleeAction(ActionWithDirection):
         # HP が尽きたら撃破
         if target.fighter.hp <= 0:
             self._die(engine, target)
+            # 倒した側が経験値を得る（プレイヤーでも敵でも）
+            if entity.level is not None and target.level is not None:
+                self._grant_xp(engine, entity, target.level.xp_given)
+
+    @staticmethod
+    def _grant_xp(engine: Engine, attacker: Entity, amount: int) -> None:
+        if amount <= 0 or attacker.level is None or attacker.fighter is None:
+            return
+        is_player = attacker is engine.player
+        if is_player:
+            engine.message_log.add_message(f"{amount} の経験値を得た。", colors.XP)
+
+        gained = attacker.level.add_xp(amount)
+        for _ in range(gained):
+            f = attacker.fighter
+            f.max_hp += HP_PER_LEVEL
+            f.hp += HP_PER_LEVEL       # 上昇分だけ回復
+            f.power += POWER_PER_LEVEL
+            if is_player:
+                engine.message_log.add_message(
+                    f"レベルアップ！ Lv.{attacker.level.current_level} になった。",
+                    colors.LEVEL_UP,
+                )
+            elif engine.game_map.visible[attacker.x, attacker.y]:
+                # 見えている敵のレベルアップだけ通知（ログを汚さない）
+                engine.message_log.add_message(
+                    f"{attacker.name} がレベルアップした！", colors.LEVEL_UP
+                )
 
     @staticmethod
     def _die(engine: Engine, target: Entity) -> None:

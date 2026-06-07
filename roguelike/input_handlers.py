@@ -26,19 +26,21 @@ _DIRECTIONS = {
 
 
 def dispatch_event(event: pygame.event.Event, engine: "Engine") -> Optional[Action]:
-    """pygame のイベントを Action に変換する。該当しなければ None。"""
+    """単発キー（押すたび1回）のイベントを Action に変換する。
+
+    移動モードの方向キーはここでは扱わず、長押し対応のため
+    held_movement_action() でフレーム毎にポーリングする。
+    """
     if event.type == pygame.QUIT:
         raise SystemExit()
 
     if event.type == pygame.KEYDOWN:
         key = event.key
 
-        if key in _DIRECTIONS:
+        # 攻撃モードの方向キーは1押し1攻撃（連打防止のため単発で扱う）
+        if key in _DIRECTIONS and engine.attack_mode:
             dx, dy = _DIRECTIONS[key]
-            # 攻撃モードなら踏み込まずに攻撃、通常は移動（敵がいればぶつかって攻撃）
-            if engine.attack_mode:
-                return MeleeAction(dx, dy)
-            return BumpAction(dx, dy)
+            return MeleeAction(dx, dy)
 
         if key == pygame.K_z:
             return WaitAction()                 # 足踏み
@@ -47,4 +49,18 @@ def dispatch_event(event: pygame.event.Event, engine: "Engine") -> Optional[Acti
         if key == pygame.K_ESCAPE:
             return EscapeAction()
 
+    return None
+
+
+def held_movement_action(engine: "Engine") -> Optional[Action]:
+    """押しっぱなしの方向キーから移動 Action を返す（移動モード時のみ）。
+
+    メインループがクールダウンを挟みつつ毎フレーム呼ぶことで連続移動になる。
+    """
+    if engine.attack_mode or engine.game_over:
+        return None
+    keys = pygame.key.get_pressed()
+    for keycode, (dx, dy) in _DIRECTIONS.items():
+        if keys[keycode]:
+            return BumpAction(dx, dy)
     return None

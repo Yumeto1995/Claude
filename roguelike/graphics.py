@@ -5,7 +5,9 @@ assets/<key>.png があればそれを使い、無ければ簡単な仮タイル
 """
 from __future__ import annotations
 
+import math
 import os
+import time
 from typing import TYPE_CHECKING, Dict
 
 import pygame
@@ -17,6 +19,28 @@ if TYPE_CHECKING:
     from engine import Engine
 
 TILE_SIZE = 32  # 1タイルのピクセルサイズ
+
+
+class AttackAnim:
+    """攻撃したエンティティが攻撃方向へスッと踏み込んで戻るモーション。"""
+
+    DURATION = 0.18                 # 再生時間（秒）
+    LUNGE = TILE_SIZE * 0.4         # 踏み込む最大ピクセル
+
+    def __init__(self, entity, dx: int, dy: int):
+        self.entity = entity
+        self.dx = dx
+        self.dy = dy
+        self.start = time.time()
+
+    def offset(self):
+        """現在の描画オフセット (ox, oy)。終了していたら None。"""
+        t = (time.time() - self.start) / self.DURATION
+        if t >= 1.0:
+            return None
+        # sin で 0→最大→0 と踏み込んで戻る
+        amount = math.sin(t * math.pi) * self.LUNGE
+        return (self.dx * amount, self.dy * amount)
 ASSETS_DIR = os.path.join(os.path.dirname(__file__), "assets")
 
 # スプライトのキー → 仮タイルの色（assets に PNG が無いとき使う）
@@ -79,7 +103,7 @@ def load_sprites() -> Dict[str, pygame.Surface]:
 class Renderer:
     """ウィンドウを持ち、カメラ追従でマップ・エンティティ・下部UIを描く。"""
 
-    PANEL_HEIGHT = 150   # 下部パネル（HP＋ログ）の高さ
+    PANEL_HEIGHT = 178   # 下部パネル（HP/Lv＋ログ）の高さ
     LOG_LINES = 4        # ログの表示行数
     LINE_HEIGHT = 26
 
@@ -92,8 +116,13 @@ class Renderer:
         )
         pygame.display.set_caption("Roguelike")
         self.sprites = load_sprites()
+        # 探索済み（今は見えない）タイル用の暗いバージョン
+        self.dark_sprites = {
+            key: self._darken(surf) for key, surf in self.sprites.items()
+        }
         self.font = load_font(22)        # HP・ログ用
         self.big_font = load_font(48)    # ゲームオーバー用
+        self.attack_anims = []           # 再生中の攻撃モーション
 
     def render(self, engine: "Engine") -> None:
         screen = self.screen
@@ -104,7 +133,7 @@ class Renderer:
         cam_x = max(0, min(engine.player.x - self.view_w // 2, gm.width - self.view_w))
         cam_y = max(0, min(engine.player.y - self.view_h // 2, gm.height - self.view_h))
 
-        # 地形を描画
+        # 地形を描画（見えている=明るく / 探索済み=暗く / 未探索=黒）
         for sy in range(self.view_h):
             for sx in range(self.view_w):
                 wx, wy = cam_x + sx, cam_y + sy
@@ -112,14 +141,25 @@ class Renderer:
                     continue
                 sprite_id = gm.tiles["sprite"][wx, wy]
                 key = "wall" if sprite_id == tile_types.SPRITE_WALL else "floor"
-                screen.blit(self.sprites[key], (sx * TILE_SIZE, sy * TILE_SIZE))
+                pos = (sx * TILE_SIZE, sy * TILE_SIZE)
+                if gm.visible[wx, wy]:
+                    screen.blit(self.sprites[key], pos)
+                elif gm.explored[wx, wy]:
+                    screen.blit(self.dark_sprites[key], pos)
+                # 未探索は描かない（黒のまま）
 
-        # エンティティを描画（死体→生者の順）
+        # 攻撃モーションのオフセットを更新（id(entity) → (ox, oy)）
+        offsets = self._update_animations(engine)
+
+        # エンティティを描画（死体→生者の順）。見えているタイルのものだけ。
         for entity in sorted(gm.entities, key=lambda e: e.blocks_movement):
+            if not gm.visible[entity.x, entity.y]:
+                continue
             ex, ey = entity.x - cam_x, entity.y - cam_y
             if 0 <= ex < self.view_w and 0 <= ey < self.view_h:
                 sprite = self.sprites.get(entity.sprite, self.sprites["player"])
-                screen.blit(sprite, (ex * TILE_SIZE, ey * TILE_SIZE))
+                ox, oy = offsets.get(id(entity), (0, 0))
+                screen.blit(sprite, (ex * TILE_SIZE + ox, ey * TILE_SIZE + oy))
 
         self._render_panel(engine)
 
@@ -127,6 +167,30 @@ class Renderer:
             self._render_game_over()
 
         pygame.display.flip()
+
+    @staticmethod
+    def _darken(surf: pygame.Surface) -> pygame.Surface:
+        """スプライトを暗くしたコピーを返す（探索済みタイルの記憶表示用）。"""
+        dark = surf.copy()
+        dark.fill((90, 90, 110), special_flags=pygame.BLEND_RGB_MULT)
+        return dark
+
+    def _update_animations(self, engine: "Engine") -> Dict[int, tuple]:
+        """engine の予約を取り込み、再生中モーションのオフセットを集計して返す。"""
+        for entity, dx, dy in engine.drain_animations():
+            self.attack_anims.append(AttackAnim(entity, dx, dy))
+
+        offsets: Dict[int, tuple] = {}
+        active = []
+        for anim in self.attack_anims:
+            off = anim.offset()
+            if off is None:
+                continue  # 再生終了
+            active.append(anim)
+            ox, oy = offsets.get(id(anim.entity), (0.0, 0.0))
+            offsets[id(anim.entity)] = (ox + off[0], oy + off[1])
+        self.attack_anims = active
+        return offsets
 
     def _render_panel(self, engine: "Engine") -> None:
         """下部パネル：HP とメッセージログ。"""
@@ -162,12 +226,21 @@ class Renderer:
             mode_label, mode_color = "[移動モード]", (150, 200, 150)
         screen.blit(self.font.render(mode_label, True, mode_color), (x, y))
 
-        # メッセージログ（HPの下）
+        # 2段目：レベルと経験値
+        lv = engine.player.level
+        lv_surf = self.font.render(
+            f"Lv.{lv.current_level}   XP: {lv.current_xp}/{lv.experience_to_next_level}",
+            True,
+            colors.XP,
+        )
+        screen.blit(lv_surf, (8, y + self.LINE_HEIGHT))
+
+        # メッセージログ（3段目以降）
         engine.message_log.render(
             screen,
             self.font,
             x=8,
-            y=self.play_h + 6 + self.LINE_HEIGHT,
+            y=self.play_h + 6 + self.LINE_HEIGHT * 2,
             line_height=self.LINE_HEIGHT,
             max_lines=self.LOG_LINES,
         )

@@ -20,9 +20,13 @@ class GameMap:
         self.width = width
         self.height = height
         self.entities: List["Entity"] = []
+        self.rooms: List[tuple] = []  # 各部屋の (x1, y1, x2, y2)。FOV で使う。
 
         # 最初は全面を壁にしておき、生成側で部屋・通路を床に掘る
         self.tiles = np.full((width, height), fill_value=tile_types.wall, order="F")
+        # 視界の状態
+        self.visible = np.full((width, height), False, order="F")   # 今見えている
+        self.explored = np.full((width, height), False, order="F")  # 一度でも見た
 
     def in_bounds(self, x: int, y: int) -> bool:
         """(x, y) がマップ内なら True。"""

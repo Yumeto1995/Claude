@@ -122,5 +122,7 @@ def generate_dungeon(
             place_entities(new_room, dungeon, max_monsters_per_room)
 
         rooms.append(new_room)
+        # FOV 用に部屋の範囲を記録
+        dungeon.rooms.append((new_room.x1, new_room.y1, new_room.x2, new_room.y2))
 
     return dungeon

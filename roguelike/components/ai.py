@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, List, Tuple
+import random
+from typing import TYPE_CHECKING, List, Optional, Tuple
 
 import numpy as np
 
@@ -10,6 +11,8 @@ from pathfinding import find_path
 if TYPE_CHECKING:
     from engine import Engine
     from entity import Entity
+
+INFIGHT_CHANCE = 0.25  # 隣接する別の敵を攻撃してしまう確率（同士討ち）
 
 
 class BaseAI:
@@ -50,13 +53,25 @@ class HostileEnemy(BaseAI):
         self.path: List[Tuple[int, int]] = []
 
     def perform(self, engine: "Engine") -> None:
+        # プレイヤーから見えていない敵は動かない（暗闇では眠っている）
+        if not engine.game_map.visible[self.entity.x, self.entity.y]:
+            return
+
         target = engine.player
         dx = target.x - self.entity.x
         dy = target.y - self.entity.y
 
-        # 上下左右に隣接していれば攻撃
+        # プレイヤーが上下左右に隣接していれば攻撃（最優先）
         if abs(dx) + abs(dy) == 1:
             MeleeAction(dx, dy).perform(engine, self.entity)
+            return
+
+        # 隣接する別の敵に一定確率で同士討ち
+        foe = self._adjacent_enemy(engine)
+        if foe is not None and random.random() < INFIGHT_CHANCE:
+            MeleeAction(
+                foe.x - self.entity.x, foe.y - self.entity.y
+            ).perform(engine, self.entity)
             return
 
         # 経路を計算して1歩だけ進む
@@ -66,3 +81,13 @@ class HostileEnemy(BaseAI):
             MovementAction(
                 next_x - self.entity.x, next_y - self.entity.y
             ).perform(engine, self.entity)
+
+    def _adjacent_enemy(self, engine: "Engine") -> Optional["Entity"]:
+        """上下左右に隣接する『別の生きた敵』を返す。なければ None。"""
+        for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1)):
+            other = engine.game_map.get_blocking_entity_at(
+                self.entity.x + dx, self.entity.y + dy
+            )
+            if other is not None and other is not engine.player and other.ai is not None:
+                return other
+        return None
