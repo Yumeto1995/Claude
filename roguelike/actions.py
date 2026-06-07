@@ -4,6 +4,7 @@ from typing import TYPE_CHECKING
 
 import colors
 import combat
+import item_category
 
 if TYPE_CHECKING:
     from engine import Engine
@@ -56,6 +57,19 @@ class ToggleInventoryAction(Action):
         engine.inventory_open = not engine.inventory_open
 
 
+class CycleInventoryCategoryAction(Action):
+    """持ち物メニューの分類タブを左右に切り替える（ターンは経過しない）。"""
+
+    consumes_turn = False
+
+    def __init__(self, delta: int):
+        self.delta = delta
+
+    def perform(self, engine: Engine, entity: Entity) -> None:
+        n = len(item_category.ORDER)
+        engine.inventory_category = (engine.inventory_category + self.delta) % n
+
+
 class UseItemAction(Action):
     """持ち物のアイテムを使う。"""
 
@@ -80,6 +94,8 @@ class UseItemAction(Action):
                 self.consumes_turn = False  # 使えなかった（満タン等）→ターン非消費
             return
 
+        # 素材・大切なものなど、使用も装備もできないもの
+        engine.message_log.add_message(f"{item.name} は今は使えない。", colors.NO_EFFECT)
         self.consumes_turn = False
 
 

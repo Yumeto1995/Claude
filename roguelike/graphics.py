@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING, Dict
 import pygame
 
 import colors
+import item_category
 import tile_types
 
 if TYPE_CHECKING:
@@ -58,6 +59,8 @@ PLACEHOLDER_COLORS: Dict[str, tuple] = {
     "sword": (230, 230, 245),
     "leather_armor": (160, 110, 60),
     "chain_mail": (150, 160, 180),
+    "material": (120, 180, 120),
+    "key_item": (240, 210, 90),
 }
 
 TERRAIN_KEYS = {"floor", "wall"}
@@ -179,36 +182,54 @@ class Renderer:
         pygame.display.flip()
 
     def _render_inventory(self, engine: "Engine") -> None:
-        """持ち物メニューのオーバーレイ。"""
-        items = engine.player.inventory.items
+        """持ち物メニューのオーバーレイ（分類タブ付き）。"""
+        screen = self.screen
+        all_items = engine.player.inventory.items
+        current = item_category.ORDER[engine.inventory_category]
+        items = item_category.items_in(all_items, current)
+
         x, y = 24, 24
-        width = 380
-        height = 56 + max(1, len(items)) * self.LINE_HEIGHT
+        width = 540
+        height = 92 + max(1, len(items)) * self.LINE_HEIGHT
 
         box = pygame.Surface((width, height))
         box.set_alpha(235)
         box.fill((15, 15, 25))
-        self.screen.blit(box, (x, y))
-        pygame.draw.rect(self.screen, (120, 120, 150), (x, y, width, height), 2)
+        screen.blit(box, (x, y))
+        pygame.draw.rect(screen, (120, 120, 150), (x, y, width, height), 2)
 
-        title = self.font.render("もちもの（i で閉じる）", True, (255, 255, 255))
-        self.screen.blit(title, (x + 14, y + 12))
+        # 分類タブ（現在の分類を強調、各分類の所持数を併記）
+        tab_x = x + 14
+        for cat in item_category.ORDER:
+            count = len(item_category.items_in(all_items, cat))
+            label = f"{item_category.LABELS[cat]}({count})"
+            color = (255, 230, 120) if cat is current else (130, 130, 145)
+            surf = self.font.render(label, True, color)
+            screen.blit(surf, (tab_x, y + 10))
+            tab_x += surf.get_width() + 14
 
+        # 操作ヒント
+        hint = self.font.render(
+            "←→：分類切替   a〜：使用/装備   i：閉じる", True, (150, 150, 160)
+        )
+        screen.blit(hint, (x + 14, y + 10 + self.LINE_HEIGHT))
+
+        # 現在の分類のアイテム一覧
+        list_y = y + 14 + self.LINE_HEIGHT * 2
         if not items:
-            self.screen.blit(
-                self.font.render("（からっぽ）", True, (160, 160, 160)),
-                (x + 18, y + 12 + self.LINE_HEIGHT),
+            screen.blit(
+                self.font.render("（なし）", True, (160, 160, 160)), (x + 18, list_y)
             )
-        else:
-            equipment = engine.player.equipment
-            for i, item in enumerate(items):
-                letter = chr(ord("a") + i)
-                stat = self._equippable_stat_text(item)
-                mark = "  [装備中]" if equipment.item_is_equipped(item) else ""
-                line = self.font.render(
-                    f"{letter}) {item.name}{stat}{mark}", True, (230, 230, 230)
-                )
-                self.screen.blit(line, (x + 18, y + 12 + (i + 1) * self.LINE_HEIGHT))
+            return
+        equipment = engine.player.equipment
+        for i, item in enumerate(items):
+            letter = chr(ord("a") + i)
+            stat = self._equippable_stat_text(item)
+            mark = "  [装備中]" if equipment.item_is_equipped(item) else ""
+            line = self.font.render(
+                f"{letter}) {item.name}{stat}{mark}", True, (230, 230, 230)
+            )
+            screen.blit(line, (x + 18, list_y + i * self.LINE_HEIGHT))
 
     @staticmethod
     def _equippable_stat_text(item) -> str:

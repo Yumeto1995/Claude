@@ -20,6 +20,7 @@ class Engine:
         self.game_over = False
         self.attack_mode = False     # True なら方向キーで攻撃、False なら移動
         self.inventory_open = False  # 持ち物メニューを開いているか
+        self.inventory_category = 0  # 持ち物メニューで選択中の分類タブ
         # 攻撃モーションの予約 [(entity, dx, dy), ...]。Renderer が取り出して再生する。
         self.pending_animations = []
         self.message_log = MessageLog()
@@ -66,7 +67,8 @@ class Engine:
         """短剣と革の鎧を持たせて装備させる（開始時）。"""
         dagger = entity_factories.dagger.spawn(0, 0)
         armor = entity_factories.leather_armor.spawn(0, 0)
-        self.player.inventory.items.extend([dagger, armor])
+        proof = entity_factories.adventurers_proof.spawn(0, 0)  # 大切なもの
+        self.player.inventory.items.extend([dagger, armor, proof])
         self.player.equipment.weapon = dagger
         self.player.equipment.armor = armor
 

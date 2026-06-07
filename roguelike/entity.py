@@ -11,6 +11,7 @@ if TYPE_CHECKING:
     from components.fighter import Fighter
     from components.inventory import Inventory
     from components.level import Level
+    from item_category import ItemCategory
 
 
 class Entity:
@@ -34,6 +35,7 @@ class Entity:
         inventory: Optional["Inventory"] = None,
         equippable: Optional["Equippable"] = None,
         equipment: Optional["Equipment"] = None,
+        item_category: Optional["ItemCategory"] = None,
     ):
         self.x = x
         self.y = y
@@ -65,6 +67,8 @@ class Entity:
         self.equipment = equipment
         if self.equipment is not None:
             self.equipment.entity = self
+        # 持ち物画面の分類の明示指定（素材・大切なもの用。武器/防具/消費は自動判定）
+        self.item_category = item_category
 
     def spawn(self, x: int, y: int) -> "Entity":
         """このテンプレートの複製を (x, y) に作って返す。"""

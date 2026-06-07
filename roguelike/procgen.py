@@ -102,8 +102,9 @@ def place_items(
             entity_factories.sword,
             entity_factories.leather_armor,
             entity_factories.chain_mail,
+            entity_factories.slime_shard,
         ]
-        weights = [50, 12, 10, 10, 5, 8, 5]
+        weights = [45, 12, 10, 10, 5, 8, 5, 12]
         template = random.choices(templates, weights=weights)[0]
         dungeon.entities.append(template.spawn(x, y))
 

@@ -16,6 +16,7 @@ from components.fighter import Fighter
 from components.inventory import Inventory
 from components.level import Level
 from entity import Entity
+from item_category import ItemCategory
 
 player = Entity(
     sprite="player",
@@ -96,4 +97,20 @@ chain_mail = Entity(
     name="鎖帷子",
     blocks_movement=False,
     equippable=Equippable(EquipmentType.ARMOR, defense_bonus=3),
+)
+
+# --- 素材アイテム（効果なし。将来の合成用などに持っておく）---
+slime_shard = Entity(
+    sprite="material",
+    name="スライムのかけら",
+    blocks_movement=False,
+    item_category=ItemCategory.MATERIAL,
+)
+
+# --- 大切なもの（捨てられない重要アイテム）---
+adventurers_proof = Entity(
+    sprite="key_item",
+    name="冒険者の証",
+    blocks_movement=False,
+    item_category=ItemCategory.KEY,
 )

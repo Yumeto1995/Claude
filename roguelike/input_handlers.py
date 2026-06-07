@@ -4,9 +4,11 @@ from typing import TYPE_CHECKING, Optional
 
 import pygame
 
+import item_category
 from actions import (
     Action,
     BumpAction,
+    CycleInventoryCategoryAction,
     EscapeAction,
     MeleeAction,
     ToggleAttackModeAction,
@@ -61,11 +63,18 @@ def dispatch_event(event: pygame.event.Event, engine: "Engine") -> Optional[Acti
 
 
 def _inventory_keys(key: int, engine: "Engine") -> Optional[Action]:
-    """持ち物メニュー中のキー操作。a〜 でアイテム使用、ESC/i で閉じる。"""
+    """持ち物メニュー中のキー操作。←→で分類切替、a〜で使用/装備、ESC/i で閉じる。"""
     if key in (pygame.K_ESCAPE, pygame.K_i):
         return ToggleInventoryAction()  # 閉じる
-    index = key - pygame.K_a            # a=0, b=1, ...
-    items = engine.player.inventory.items
+    if key == pygame.K_LEFT:
+        return CycleInventoryCategoryAction(-1)
+    if key == pygame.K_RIGHT:
+        return CycleInventoryCategoryAction(1)
+
+    # 現在の分類タブの中だけを a〜 で選ぶ
+    index = key - pygame.K_a  # a=0, b=1, ...
+    category = item_category.ORDER[engine.inventory_category]
+    items = item_category.items_in(engine.player.inventory.items, category)
     if 0 <= index < len(items):
         return UseItemAction(items[index])
     return None
