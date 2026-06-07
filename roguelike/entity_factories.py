@@ -12,7 +12,7 @@ player = Entity(
     sprite="player",
     name="プレイヤー",
     blocks_movement=True,
-    fighter=Fighter(hp=30, defense=2, power=5),
+    fighter=Fighter(hp=30, defense=2, power=5, max_stamina=100),
 )
 
 goblin = Entity(

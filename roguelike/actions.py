@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+import colors
+
 if TYPE_CHECKING:
     from engine import Engine
     from entity import Entity
@@ -10,6 +12,9 @@ if TYPE_CHECKING:
 class Action:
     """すべての行動の基底クラス。perform() で実際の効果を起こす。"""
 
+    consumes_turn = True  # この行動でターンが経過する（＝敵が動く）か
+    is_attack = False     # 攻撃モーションか（攻撃ターンはスタミナ回復しない）
+
     def perform(self, engine: Engine, entity: Entity) -> None:
         raise NotImplementedError()
 
@@ -17,8 +22,28 @@ class Action:
 class EscapeAction(Action):
     """ゲームを終了する。"""
 
+    consumes_turn = False
+
     def perform(self, engine: Engine, entity: Entity) -> None:
         raise SystemExit()
+
+
+class WaitAction(Action):
+    """その場で1ターン待つ（足踏み）。何もしないがターンは経過する。"""
+
+    def perform(self, engine: Engine, entity: Entity) -> None:
+        engine.message_log.add_message("その場で待機した。", colors.NO_EFFECT)
+
+
+class ToggleAttackModeAction(Action):
+    """移動モード ⇄ 攻撃モードを切り替える（ターンは経過しない）。"""
+
+    consumes_turn = False
+
+    def perform(self, engine: Engine, entity: Entity) -> None:
+        engine.attack_mode = not engine.attack_mode
+        mode = "攻撃モード" if engine.attack_mode else "移動モード"
+        engine.message_log.add_message(f"{mode} に切り替えた。", colors.WELCOME)
 
 
 class ActionWithDirection(Action):
@@ -52,21 +77,34 @@ class MovementAction(ActionWithDirection):
 class MeleeAction(ActionWithDirection):
     """隣接するエンティティへの近接攻撃。"""
 
+    is_attack = True
+
     def perform(self, engine: Engine, entity: Entity) -> None:
+        # スタミナが足りなければ攻撃モーションを取れない（ターンも消費しない）
+        if entity.fighter is not None and not entity.fighter.can_attack():
+            engine.message_log.add_message("スタミナが足りない！", colors.NO_EFFECT)
+            self.consumes_turn = False
+            return
+        # 攻撃モーション成立：スタミナを消費（空振りでも消費する）
+        if entity.fighter is not None:
+            entity.fighter.spend_attack_stamina()
+
         dest_x = entity.x + self.dx
         dest_y = entity.y + self.dy
         target = engine.game_map.get_blocking_entity_at(dest_x, dest_y)
-        # 戦えない相手（死体など）には何もしない
+        # 攻撃先に戦える相手がいなければ空振り（攻撃モードでの素振りなど）
         if target is None or target.fighter is None or entity.fighter is None:
+            engine.message_log.add_message("空振りした。", colors.NO_EFFECT)
             return
 
         damage = entity.fighter.power - target.fighter.defense
+        attack_color = colors.PLAYER_ATK if entity is engine.player else colors.ENEMY_ATK
         desc = f"{entity.name} が {target.name} を攻撃"
         if damage > 0:
-            print(f"{desc} → {damage} ダメージ")
+            engine.message_log.add_message(f"{desc} → {damage} ダメージ", attack_color)
             target.fighter.hp -= damage
         else:
-            print(f"{desc} → 効果がない")
+            engine.message_log.add_message(f"{desc} → 効果がない", colors.NO_EFFECT)
 
         # HP が尽きたら撃破
         if target.fighter.hp <= 0:
@@ -75,10 +113,10 @@ class MeleeAction(ActionWithDirection):
     @staticmethod
     def _die(engine: Engine, target: Entity) -> None:
         if target is engine.player:
-            print("*** あなたは倒れた！  ESC で終了 ***")
+            engine.message_log.add_message("あなたは倒れた！  ESC で終了", colors.PLAYER_DIE)
             engine.game_over = True
         else:
-            print(f"{target.name} を倒した！")
+            engine.message_log.add_message(f"{target.name} を倒した！", colors.ENEMY_DIE)
             target.ai = None                 # もう動かない
             target.blocks_movement = False   # 死体はすり抜けられる
             target.name = f"{target.name}の死体"
@@ -94,6 +132,10 @@ class BumpAction(ActionWithDirection):
         dest_y = entity.y + self.dy
 
         if engine.game_map.get_blocking_entity_at(dest_x, dest_y):
-            MeleeAction(self.dx, self.dy).perform(engine, entity)
+            sub: ActionWithDirection = MeleeAction(self.dx, self.dy)
         else:
-            MovementAction(self.dx, self.dy).perform(engine, entity)
+            sub = MovementAction(self.dx, self.dy)
+        sub.perform(engine, entity)
+        # 実際に行った行動（攻撃 or 移動）の結果を引き継ぐ
+        self.consumes_turn = sub.consumes_turn
+        self.is_attack = sub.is_attack
