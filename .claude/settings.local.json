@@ -9,7 +9,17 @@
       "Bash(git config *)",
       "Bash(git -C /Users/yajimayumedo/Claude diff)",
       "Bash(git -C /Users/yajimayumedo/Claude add .claude/settings.local.json Git-Claude-Repo/)",
-      "Bash(git -C /Users/yajimayumedo/Claude commit -m ' *)"
+      "Bash(git -C /Users/yajimayumedo/Claude commit -m ' *)",
+      "Bash(gh --version)",
+      "Bash(/opt/homebrew/bin/gh --version)",
+      "Bash(/usr/local/bin/gh --version)",
+      "Bash(git -C /Users/yajimayumedo/Claude add README.md)",
+      "Bash(git -C /Users/yajimayumedo/Claude push -u origin improve/readme)",
+      "Bash(/opt/homebrew/bin/gh pr create --repo Yumeto1995/Claude --title 'Improve README with Getting Started section' --body ' *)",
+      "Bash(/opt/homebrew/bin/gh pr *)",
+      "Bash(git -C /Users/yajimayumedo/Claude checkout -b update/claude-settings)",
+      "Bash(git -C /Users/yajimayumedo/Claude add .claude/settings.local.json)",
+      "Bash(git -C /Users/yajimayumedo/Claude push -u origin update/claude-settings)"
     ]
   }
 }
