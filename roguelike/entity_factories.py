@@ -8,12 +8,11 @@ from components.ai import HostileEnemy
 from components.consumable import (
     ConfusionConsumable,
     FoodConsumable,
-    FoodDishConsumable,
     HealingConsumable,
     LightningConsumable,
     TentConsumable,
+    UnlockZoneConsumable,
 )
-from status import StatusEffect
 from components.equipment import Equipment
 from components.equippable import Equippable, EquipmentType
 from components.fighter import Fighter
@@ -130,6 +129,15 @@ mushroom = Entity(
     sprite="food", name="キノコ", blocks_movement=False,
     consumable=FoodConsumable(amount=15),
 )
+meat = Entity(
+    sprite="food", name="肉", blocks_movement=False,
+    consumable=FoodConsumable(amount=20),
+)
+# 毒キノコ：生食はできない素材。料理して毒を抜けば食材になる（生焼けだと食中毒）
+poison_mushroom = Entity(
+    sprite="material", name="毒キノコ", blocks_movement=False,
+    item_category=ItemCategory.MATERIAL,
+)
 
 # --- 種（素材。拠点の畑に植えると、階を潜るうちに食材が育つ）---
 nut_seed = Entity(
@@ -145,27 +153,7 @@ mushroom_seed = Entity(
     item_category=ItemCategory.MATERIAL,
 )
 
-# --- 料理（消費アイテム。満腹度回復＋一時バフ。料理で作る）---
-power_dish = Entity(
-    sprite="dish", name="ちからの料理", blocks_movement=False,
-    consumable=FoodDishConsumable(
-        satiety=40, effect=StatusEffect("ちから+3", turns=25, power_bonus=3)
-    ),
-)
-guard_dish = Entity(
-    sprite="dish", name="まもりの料理", blocks_movement=False,
-    consumable=FoodDishConsumable(
-        satiety=40, effect=StatusEffect("まもり+3", turns=25, defense_bonus=3)
-    ),
-)
-vigor_dish = Entity(
-    sprite="dish", name="げんきの料理", blocks_movement=False,
-    consumable=FoodDishConsumable(satiety=60, heal=15),
-)
-failed_dish = Entity(
-    sprite="dish", name="失敗作", blocks_movement=False,
-    consumable=FoodDishConsumable(satiety=10),
-)
+# 料理は固定テンプレートではなく cooking.cook() が動的に生成する。
 
 # --- 大切なもの（捨てられない重要アイテム）---
 adventurers_proof = Entity(
@@ -181,5 +169,17 @@ magic_tent = Entity(
     name="魔法のテント",
     blocks_movement=False,
     consumable=TentConsumable(),
+    item_category=ItemCategory.KEY,
+)
+
+# 区画開放の鍵（大切なもの。使うと拠点の区画が開放される）
+ranch_key = Entity(
+    sprite="key_item", name="牧場の鍵", blocks_movement=False,
+    consumable=UnlockZoneConsumable("ranch", "牧場"),
+    item_category=ItemCategory.KEY,
+)
+fishery_key = Entity(
+    sprite="key_item", name="漁業の鍵", blocks_movement=False,
+    consumable=UnlockZoneConsumable("fishery", "漁業"),
     item_category=ItemCategory.KEY,
 )

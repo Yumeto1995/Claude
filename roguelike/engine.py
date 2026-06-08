@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Iterable
 
+import camp_map
 import colors
 import entity_factories
 import farming
@@ -23,13 +24,18 @@ class Engine:
         self.attack_mode = False     # True なら方向キーで攻撃、False なら移動
         self.inventory_open = False  # 持ち物メニューを開いているか
         self.inventory_category = 0  # 持ち物メニューで選択中の分類タブ
-        # 拠点（魔法のテント）の状態
+        # 拠点（魔法のテント＝歩けるテント内マップ）の状態
         self.in_camp = False
-        self.camp_screen = "main"    # main/cooking/cook/alchemy/farm/farm_plant
+        self.camp_menu = None        # None=拠点を歩いている / 文字列=設備メニュー表示中
         self.camp_cursor = 0
-        self.cook_first = None       # 料理で1つ目に選んだ食材名
+        self.cook_pot = []           # 料理の鍋に入れた食材名のリスト
+        self.camp_active_plot = 0    # 畑メニューで操作中の区画番号
         self.farm_plots = [None] * 4  # 畑（None=空き / dict=栽培中）
-        self.discovered_dishes = set()  # 発見済みの料理名
+        self.discovered_dishes = set()  # 作ったことのある料理名
+        self.storage = []            # 拠点の倉庫（持ち越し収納）
+        self.unlocked_zones = set()  # 開放済み区画（"ranch"/"fishery"）
+        self.dungeon_map = None      # 拠点滞在中、ダンジョンマップを退避
+        self.dungeon_pos = (0, 0)
         # 攻撃モーションの予約 [(entity, dx, dy), ...]。Renderer が取り出して再生する。
         self.pending_animations = []
         self.message_log = MessageLog()
@@ -76,6 +82,10 @@ class Engine:
         # 死亡後は終了(ESC)以外の操作を受け付けない
         if self.game_over and not isinstance(action, EscapeAction):
             return
+        # 拠点（テント内）はターンが経過しない。移動と設備操作だけ。
+        if self.in_camp:
+            action.perform(self, self.player)
+            return
         prev = (self.player.x, self.player.y)
         action.perform(self, self.player)
         # ターンを消費する行動の後だけ敵が動く（モード切替・壁ぶつかりは消費しない）
@@ -111,6 +121,54 @@ class Engine:
             )
         self.player.inventory.items.append(entity_factories.nut_seed.spawn(0, 0))
         self.player.inventory.items.append(entity_factories.herb_seed.spawn(0, 0))
+        # 料理をすぐ試せるよう食材も少し
+        self.player.inventory.items.append(entity_factories.meat.spawn(0, 0))
+        self.player.inventory.items.append(entity_factories.herb.spawn(0, 0))
+
+    def enter_camp(self) -> None:
+        """ダンジョンを退避して、歩けるテント内マップに切り替える。"""
+        self.dungeon_map = self.game_map
+        self.dungeon_pos = (self.player.x, self.player.y)
+        self.game_map = camp_map.build_camp_map()
+        self.player.x, self.player.y = camp_map.ENTRANCE
+        self.game_map.entities = [self.player]
+        self.in_camp = True
+        self.camp_menu = None
+        self.camp_cursor = 0
+        self.cook_pot = []
+
+    def leave_camp(self) -> None:
+        """ダンジョンに戻る。"""
+        self.game_map = self.dungeon_map
+        self.player.x, self.player.y = self.dungeon_pos
+        self.in_camp = False
+        self.camp_menu = None
+        self.message_log.add_message("テントをたたんでダンジョンに戻った。", colors.WELCOME)
+
+    def camp_interact(self) -> None:
+        """足元の設備を使う（拠点を歩いているときに Enter）。"""
+        kind = camp_map.STATIONS.get((self.player.x, self.player.y))
+        if kind is None:
+            return
+        if kind == "exit":
+            self.leave_camp()
+        elif kind == "cooking":
+            self.camp_menu, self.camp_cursor, self.cook_pot = "cook", 0, []
+        elif kind == "alchemy":
+            self.camp_menu, self.camp_cursor = "alchemy", 0
+        elif kind == "storage":
+            self.camp_menu, self.camp_cursor = "storage", 0
+        elif kind.startswith("farm"):
+            farming.interact_plot(self, int(kind[4:]))
+        elif kind in ("ranch", "fishery"):
+            label = camp_map.STATION_LABELS[kind]
+            if kind in self.unlocked_zones:
+                self.message_log.add_message(f"{label}（準備中：次回実装予定）", colors.NO_EFFECT)
+            else:
+                key = "牧場の鍵" if kind == "ranch" else "漁業の鍵"
+                self.message_log.add_message(
+                    f"{label}はまだ使えない。『{key}』を見つけて開放しよう。", colors.NO_EFFECT
+                )
 
     def _tick_status_effects(self) -> None:
         """料理バフなどの一時効果を1ターン分減らし、切れたら外す。"""

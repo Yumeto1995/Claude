@@ -169,6 +169,24 @@ class CampBackAction(Action):
         camp.back(engine)
 
 
+class CampInteractAction(Action):
+    """テント内で足元の設備を使う（Enter）。"""
+
+    consumes_turn = False
+
+    def perform(self, engine: Engine, entity: Entity) -> None:
+        engine.camp_interact()
+
+
+class CampLeaveAction(Action):
+    """テントからダンジョンに戻る（ESC）。"""
+
+    consumes_turn = False
+
+    def perform(self, engine: Engine, entity: Entity) -> None:
+        engine.leave_camp()
+
+
 class ActionWithDirection(Action):
     """方向 (dx, dy) を持つ行動の共通基底。"""
 

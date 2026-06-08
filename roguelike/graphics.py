@@ -69,6 +69,16 @@ PLACEHOLDER_COLORS: Dict[str, tuple] = {
     "food": (220, 180, 120),
     "seed": (170, 140, 80),
     "dish": (255, 170, 90),
+    # 拠点の設備
+    "st_cooking": (235, 130, 70),
+    "st_storage": (170, 140, 100),
+    "st_alchemy": (150, 110, 210),
+    "st_ranch": (200, 160, 110),
+    "st_fishery": (90, 150, 210),
+    "st_exit": (120, 220, 255),
+    "farm_empty": (110, 80, 55),
+    "farm_grow": (120, 170, 90),
+    "farm_ready": (230, 220, 90),
 }
 
 TERRAIN_KEYS = {"floor", "wall"}
@@ -145,6 +155,16 @@ class Renderer:
     def render(self, engine: "Engine") -> None:
         screen = self.screen
         screen.fill((0, 0, 0))
+
+        # 拠点（テント内）は専用描画
+        if engine.in_camp:
+            self._render_camp_map(engine)
+            self._render_panel(engine)
+            if engine.camp_menu is not None:
+                self._render_camp_menu(engine)
+            pygame.display.flip()
+            return
+
         gm = engine.game_map
 
         # カメラ：プレイヤー中心。マップ端ではみ出さないようクランプ
@@ -191,16 +211,65 @@ class Renderer:
         if engine.inventory_open:
             self._render_inventory(engine)
 
-        if engine.in_camp:
-            self._render_camp(engine)
-
         if engine.game_over:
             self._render_game_over()
 
         pygame.display.flip()
 
-    def _render_camp(self, engine: "Engine") -> None:
-        """拠点（魔法のテント）の画面。camp モジュールの状態に従って描く。"""
+    def _render_camp_map(self, engine: "Engine") -> None:
+        """歩けるテント内マップ（地形・設備・区画名・プレイヤー・案内）。"""
+        import camp_map
+
+        screen = self.screen
+        gm = engine.game_map
+        cam_x = max(0, min(engine.player.x - self.view_w // 2, gm.width - self.view_w))
+        cam_y = max(0, min(engine.player.y - self.view_h // 2, gm.height - self.view_h))
+
+        for sy in range(self.view_h):
+            for sx in range(self.view_w):
+                wx, wy = cam_x + sx, cam_y + sy
+                if not gm.in_bounds(wx, wy):
+                    continue
+                key = "wall" if gm.tiles["sprite"][wx, wy] == tile_types.SPRITE_WALL else "floor"
+                screen.blit(self.sprites[key], (sx * TILE_SIZE, sy * TILE_SIZE))
+
+        # 設備
+        for (wx, wy), kind in camp_map.STATIONS.items():
+            spr = self._station_sprite(kind, engine)
+            screen.blit(self.sprites[spr], ((wx - cam_x) * TILE_SIZE, (wy - cam_y) * TILE_SIZE))
+
+        # 区画名ラベル
+        for text, lx, ly in camp_map.ZONE_LABELS:
+            screen.blit(
+                self.font.render(text, True, (200, 200, 140)),
+                ((lx - cam_x) * TILE_SIZE, (ly - cam_y) * TILE_SIZE),
+            )
+
+        # プレイヤー
+        screen.blit(
+            self.sprites["player"],
+            ((engine.player.x - cam_x) * TILE_SIZE, (engine.player.y - cam_y) * TILE_SIZE),
+        )
+
+        # 足元の設備案内
+        here = camp_map.STATIONS.get((engine.player.x, engine.player.y))
+        if here is not None:
+            label = camp_map.STATION_LABELS.get(here, here)
+            txt = "Enter で " + label
+            surf = self.font.render(txt, True, colors.DESCEND)
+            screen.blit(surf, (8, self.play_h - 28))
+
+    @staticmethod
+    def _station_sprite(kind: str, engine: "Engine") -> str:
+        if kind.startswith("farm"):
+            plot = engine.farm_plots[int(kind[4:])]
+            if plot is None:
+                return "farm_empty"
+            return "farm_ready" if plot["steps_left"] <= 0 else "farm_grow"
+        return "st_" + kind
+
+    def _render_camp_menu(self, engine: "Engine") -> None:
+        """設備メニューのオーバーレイ。camp モジュールの状態に従って描く。"""
         screen = self.screen
         w = self.view_w * TILE_SIZE
         h = self.play_h + self.PANEL_HEIGHT
@@ -371,28 +440,28 @@ class Renderer:
             mode_label, mode_color = "[移動モード]", (150, 200, 150)
         screen.blit(self.font.render(mode_label, True, mode_color), (x, y))
 
-        # 階層表示（右寄せ）
-        floor_surf = self.font.render(
-            f"地下 {engine.current_floor} 階", True, colors.DESCEND
-        )
-        screen.blit(floor_surf, (width - floor_surf.get_width() - 10, y))
+        # 階層表示・文脈ヒント（ダンジョン中のみ。拠点では設備案内を別途出す）
+        if not engine.in_camp:
+            floor_surf = self.font.render(
+                f"地下 {engine.current_floor} 階", True, colors.DESCEND
+            )
+            screen.blit(floor_surf, (width - floor_surf.get_width() - 10, y))
 
-        # 文脈ヒント（右下）：階段の上なら降りる案内、足元にアイテムなら拾う案内
-        hint_text = None
-        hint_color = colors.DESCEND
-        if (engine.player.x, engine.player.y) == engine.game_map.downstairs_location:
-            hint_text = "▼ Enter で次の階へ"
-        else:
-            foot = engine.item_under_player()
-            if foot is not None:
-                hint_text = f"足元: {foot.name}（G で拾う）"
-                hint_color = colors.ITEM
-            elif engine.game_map.safe[engine.player.x, engine.player.y]:
-                hint_text = "セーフルーム（テントが使える・敵が入れない）"
-                hint_color = colors.HEAL
-        if hint_text:
-            hint = self.font.render(hint_text, True, hint_color)
-            screen.blit(hint, (width - hint.get_width() - 10, y + self.LINE_HEIGHT))
+            hint_text = None
+            hint_color = colors.DESCEND
+            if (engine.player.x, engine.player.y) == engine.game_map.downstairs_location:
+                hint_text = "▼ Enter で次の階へ"
+            else:
+                foot = engine.item_under_player()
+                if foot is not None:
+                    hint_text = f"足元: {foot.name}（G で拾う）"
+                    hint_color = colors.ITEM
+                elif engine.game_map.safe[engine.player.x, engine.player.y]:
+                    hint_text = "セーフルーム（テントが使える・敵が入れない）"
+                    hint_color = colors.HEAL
+            if hint_text:
+                hint = self.font.render(hint_text, True, hint_color)
+                screen.blit(hint, (width - hint.get_width() - 10, y + self.LINE_HEIGHT))
 
         # 2段目：レベル・経験値・実効ステータス（装備込み）
         lv = engine.player.level

@@ -80,12 +80,12 @@ class FoodConsumable(Consumable):
 
 
 class FoodDishConsumable(Consumable):
-    """料理：食べると満腹度回復＋（あれば）HP回復・一時バフが付く。"""
+    """料理：食べると満腹度変化＋HP回復＋一時効果（複数可。食中毒など負の効果も）。"""
 
-    def __init__(self, satiety: int = 0, heal: int = 0, effect=None):
-        self.satiety = satiety
+    def __init__(self, satiety: int = 0, heal: int = 0, effects=None):
+        self.satiety = satiety      # 満腹度の変化（食中毒では負）
         self.heal = heal
-        self.effect = effect  # status.StatusEffect のテンプレ or None
+        self.effects = effects or []  # status.StatusEffect のリスト
 
     def activate(self, engine: "Engine", consumer: "Entity") -> bool:
         import copy
@@ -93,37 +93,55 @@ class FoodDishConsumable(Consumable):
         f = consumer.fighter
         if f is None:
             return False
-        if self.satiety:
-            f.restore_satiety(self.satiety)
+        if f.max_satiety > 0 and self.satiety:
+            f.satiety = max(0, min(f.max_satiety, f.satiety + self.satiety))
         if self.heal:
             f.hp += self.heal
-        if self.effect is not None:
-            consumer.status_effects.append(copy.deepcopy(self.effect))
-            engine.message_log.add_message(
-                f"{self.entity.name} を食べた。{self.effect.name} の効果！", colors.HEAL
-            )
-        else:
-            engine.message_log.add_message(
-                f"{self.entity.name} を食べた。", colors.HEAL
-            )
+        for eff in self.effects:
+            consumer.status_effects.append(copy.deepcopy(eff))
+
+        names = "・".join(e.name for e in self.effects)
+        msg = f"{self.entity.name} を食べた。"
+        if names:
+            msg += f" {names}！"
+        engine.message_log.add_message(msg, colors.HEAL)
         return True
 
 
 class TentConsumable(Consumable):
-    """魔法のテント：使うと拠点（料理・錬金・食料生産）へ移動する。消費されない。"""
+    """魔法のテント：使うと歩けるテント内（拠点）へ移動する。消費されない。"""
 
     def activate(self, engine: "Engine", consumer: "Entity") -> bool:
+        if engine.in_camp:
+            return False
         if not engine.game_map.safe[consumer.x, consumer.y]:
             engine.message_log.add_message(
                 "ここではテントを張れない。セーフルームでだけ使える。", colors.NO_EFFECT
             )
             return False
-        engine.in_camp = True
-        engine.camp_screen = "main"  # 施設選択メニューから
-        engine.camp_cursor = 0
-        engine.cook_first = None
         engine.message_log.add_message("魔法のテントを張った。", colors.WELCOME)
+        engine.enter_camp()
         return False  # アイテムは消費しない
+
+
+class UnlockZoneConsumable(Consumable):
+    """区画開放の鍵：使うと拠点の対応区画（牧場/漁業）を開放する。消費されない。"""
+
+    def __init__(self, zone: str, zone_label: str):
+        self.zone = zone
+        self.zone_label = zone_label
+
+    def activate(self, engine: "Engine", consumer: "Entity") -> bool:
+        if self.zone in engine.unlocked_zones:
+            engine.message_log.add_message(
+                f"{self.zone_label}はすでに開放済み。", colors.NO_EFFECT
+            )
+            return False
+        engine.unlocked_zones.add(self.zone)
+        engine.message_log.add_message(
+            f"{self.zone_label}区画が開放された！（テント内で利用可）", colors.LEVEL_UP
+        )
+        return False  # 鍵は残る（大切なもの）
 
 
 class LightningConsumable(Consumable):

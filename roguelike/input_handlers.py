@@ -9,6 +9,8 @@ from actions import (
     Action,
     BumpAction,
     CampBackAction,
+    CampInteractAction,
+    CampLeaveAction,
     CampMoveCursorAction,
     CampSelectAction,
     CycleInventoryCategoryAction,
@@ -46,9 +48,16 @@ def dispatch_event(event: pygame.event.Event, engine: "Engine") -> Optional[Acti
     if event.type == pygame.KEYDOWN:
         key = event.key
 
-        # 拠点（テント）にいる間は専用の操作
+        # 拠点（テント内）にいる間は専用の操作
         if engine.in_camp:
-            return _camp_keys(key, engine)
+            if engine.camp_menu is not None:
+                return _camp_menu_keys(key, engine)   # 設備メニュー中
+            # テント内を歩いている：Enter=設備を使う、ESC=ダンジョンへ
+            if key in (pygame.K_RETURN, pygame.K_KP_ENTER):
+                return CampInteractAction()
+            if key == pygame.K_ESCAPE:
+                return CampLeaveAction()
+            return None  # 方向キーはポーリングで移動
 
         # 持ち物メニューを開いている間は専用の操作
         if engine.inventory_open:
@@ -76,8 +85,8 @@ def dispatch_event(event: pygame.event.Event, engine: "Engine") -> Optional[Acti
     return None
 
 
-def _camp_keys(key: int, engine: "Engine") -> Optional[Action]:
-    """拠点メニュー中のキー操作。↑↓で選択、Enterで決定、ESCで戻る。"""
+def _camp_menu_keys(key: int, engine: "Engine") -> Optional[Action]:
+    """設備メニュー中のキー操作。↑↓で選択、Enterで決定、ESCで閉じる。"""
     if key in (pygame.K_UP, pygame.K_w, pygame.K_k):
         return CampMoveCursorAction(-1)
     if key in (pygame.K_DOWN, pygame.K_s, pygame.K_j):
@@ -112,7 +121,12 @@ def held_movement_action(engine: "Engine") -> Optional[Action]:
 
     メインループがクールダウンを挟みつつ毎フレーム呼ぶことで連続移動になる。
     """
-    if engine.attack_mode or engine.game_over or engine.inventory_open or engine.in_camp:
+    if engine.game_over:
+        return None
+    if engine.in_camp:
+        if engine.camp_menu is not None:
+            return None  # 設備メニュー中は歩けない
+    elif engine.attack_mode or engine.inventory_open:
         return None
     keys = pygame.key.get_pressed()
     for keycode, (dx, dy) in _DIRECTIONS.items():

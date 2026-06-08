@@ -44,37 +44,42 @@ def has_ready(engine: "Engine") -> bool:
     return any(p is not None and p["steps_left"] <= 0 for p in engine.farm_plots)
 
 
-def plant(engine: "Engine", seed_name: str) -> None:
+def plant(engine: "Engine", seed_name: str, plot_index: int) -> None:
+    """指定した区画に種を植える。"""
+    if engine.farm_plots[plot_index] is not None:
+        return
     inv = engine.player.inventory.items
-    for i, plot in enumerate(engine.farm_plots):
-        if plot is None:
-            for it in inv:
-                if it.name == seed_name:
-                    inv.remove(it)
-                    break
-            output, steps = SEEDS[seed_name]
-            engine.farm_plots[i] = {
-                "name": output.name,
-                "template": output,
-                "steps_left": steps,
-            }
-            engine.message_log.add_message(
-                f"{seed_name} を植えた（{steps}歩 歩くと育つ）。", colors.ITEM
-            )
+    for it in inv:
+        if it.name == seed_name:
+            inv.remove(it)
+            break
+    output, steps = SEEDS[seed_name]
+    engine.farm_plots[plot_index] = {
+        "name": output.name, "template": output, "steps_left": steps,
+    }
+    engine.message_log.add_message(
+        f"{seed_name} を畑{plot_index + 1}に植えた（{steps}歩で育つ）。", colors.ITEM
+    )
+
+
+def interact_plot(engine: "Engine", i: int) -> None:
+    """畑の区画 i の上で Enter したとき：空→植える / 育成中→状態 / 完了→収穫。"""
+    plot = engine.farm_plots[i]
+    if plot is None:
+        if not seed_names_in(engine.player.inventory.items):
+            engine.message_log.add_message("植える種を持っていない。", colors.NO_EFFECT)
             return
-
-
-def harvest(engine: "Engine") -> None:
-    inv = engine.player.inventory.items
-    harvested = 0
-    for i, plot in enumerate(engine.farm_plots):
-        if plot is not None and plot["steps_left"] <= 0:
-            inv.append(plot["template"].spawn(0, 0))
-            engine.message_log.add_message(f"{plot['name']} を収穫した。", colors.ITEM)
-            engine.farm_plots[i] = None
-            harvested += 1
-    if harvested == 0:
-        engine.message_log.add_message("収穫できる作物がない。", colors.NO_EFFECT)
+        engine.camp_active_plot = i
+        engine.camp_menu = "farm_plant"
+        engine.camp_cursor = 0
+    elif plot["steps_left"] <= 0:
+        engine.player.inventory.items.append(plot["template"].spawn(0, 0))
+        engine.message_log.add_message(f"{plot['name']} を収穫した。", colors.ITEM)
+        engine.farm_plots[i] = None
+    else:
+        engine.message_log.add_message(
+            f"{plot['name']}：あと{plot['steps_left']}歩で育つ。", colors.NO_EFFECT
+        )
 
 
 def grow_step(engine: "Engine") -> None:

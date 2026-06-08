@@ -1,89 +1,161 @@
-"""料理（拠点の一施設）。食材2つを組み合わせて効果付き料理を作る。
+"""料理：栄養素ベースの自由調理。
 
-組み合わせがレシピに一致すれば料理（発見）、しなければ失敗作。
-作った料理は持ち物に入り、食べると満腹度回復＋一時バフが付く。
+任意の食材を「鍋」に入れ、調理法を選んで作る。完成品の効果は
+  栄養素の合計 × 調理法の保持率 × 入れすぎ補正
+から動的に決まる。毒性が高いと食中毒（逆効果）になる。
 """
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, List
+from typing import TYPE_CHECKING, Dict, List
 
 import colors
-import entity_factories as ef
+from status import StatusEffect
 
 if TYPE_CHECKING:
     from engine import Engine
-    from entity import Entity
 
-# 料理に使える食材
-INGREDIENTS = {"木の実", "薬草", "キノコ"}
+# 栄養素の種類（毒性 tox は別扱い）
+NUTRIENTS = ["protein", "mineral", "vitamin", "carb", "fat"]
 
-# 食材ペア（名前のソート済タプル）→ 料理テンプレート
-RECIPES = {
-    tuple(sorted(["木の実", "薬草"])): ef.power_dish,
-    tuple(sorted(["木の実", "キノコ"])): ef.guard_dish,
-    tuple(sorted(["薬草", "キノコ"])): ef.vigor_dish,
+# 食材ごとの栄養素（未記載は0）。tox は毒性。
+NUTRITION: Dict[str, Dict[str, int]] = {
+    "木の実": {"carb": 16, "fat": 18, "protein": 4},
+    "薬草":   {"vitamin": 24, "mineral": 6},
+    "キノコ": {"mineral": 18, "protein": 8, "tox": 5},
+    "肉":     {"protein": 28, "fat": 12, "tox": 4},
+    "毒キノコ": {"mineral": 12, "protein": 6, "tox": 22},
 }
 
+# 調理法 → 栄養素ごとの保持率＋毒性倍率。
+METHODS: Dict[str, Dict[str, float]] = {
+    "生":   {"protein": 1.0, "mineral": 1.0, "vitamin": 1.0, "carb": 1.0, "fat": 1.0, "tox": 1.0},
+    "焼く": {"protein": 1.2, "mineral": 1.0, "vitamin": 0.5, "carb": 1.0, "fat": 1.1, "tox": 0.5},
+    "煮る": {"protein": 0.95, "mineral": 0.85, "vitamin": 0.7, "carb": 1.15, "fat": 0.9, "tox": 0.25},
+    "蒸す": {"protein": 1.0, "mineral": 0.95, "vitamin": 0.95, "carb": 1.0, "fat": 1.0, "tox": 0.55},
+}
+METHOD_NAMES = list(METHODS.keys())
 
-def ingredient_names_in(items: List["Entity"]) -> List[str]:
+TOX_MILD = 6     # これ以上で腹痛
+TOX_SEVERE = 12  # これ以上で食中毒
+
+
+# ---- 鍋（選択中の食材）操作 ----
+
+def ingredient_names_in(items) -> List[str]:
     """持ち物にある食材の名前（重複なし）。"""
     names: List[str] = []
     for it in items:
-        if it.name in INGREDIENTS and it.name not in names:
+        if it.name in NUTRITION and it.name not in names:
             names.append(it.name)
     return names
 
 
-def has_ingredients(items: List["Entity"]) -> bool:
+def has_ingredients(items) -> bool:
     return bool(ingredient_names_in(items))
 
 
-def _count(items, name):
-    return sum(1 for it in items if it.name == name)
+def available(items, pot: List[str], name: str) -> int:
+    """まだ鍋に入れられる残り数（持ち物の数 − 鍋に入れた数）。"""
+    in_inv = sum(1 for it in items if it.name == name)
+    in_pot = pot.count(name)
+    return in_inv - in_pot
 
 
-def _remove_one(items, name):
-    for it in items:
-        if it.name == name:
-            items.remove(it)
-            return
+def pot_summary(pot: List[str]) -> str:
+    if not pot:
+        return "空"
+    counts: Dict[str, int] = {}
+    for n in pot:
+        counts[n] = counts.get(n, 0) + 1
+    return ", ".join(f"{n}×{c}" for n, c in counts.items())
 
 
-def pick(engine: "Engine", name: str) -> None:
-    """食材を1つ選ぶ。1つ目なら記録、2つ目なら調理する。"""
-    if engine.cook_first is None:
-        engine.cook_first = name
-    else:
-        _cook(engine, engine.cook_first, name)
-        engine.cook_first = None
-        engine.camp_screen = "cooking"
-        engine.camp_cursor = 0
+# ---- 調理 ----
+
+def compute_dish(pot: List[str], method: str) -> Dict:
+    """鍋の中身と調理法から、完成料理の効果を計算する。"""
+    mult = METHODS[method]
+    n = len(pot)
+    # 入れすぎ補正：4品以上から効果が薄まる
+    dilution = 1.0 if n <= 3 else max(0.5, 1.0 - 0.12 * (n - 3))
+
+    total = {k: 0.0 for k in NUTRIENTS}
+    tox = 0.0
+    for name in pot:
+        prof = NUTRITION.get(name, {})
+        for k in NUTRIENTS:
+            total[k] += prof.get(k, 0)
+        tox += prof.get("tox", 0)
+    for k in NUTRIENTS:
+        total[k] = total[k] * mult[k] * dilution
+    tox *= mult["tox"]
+
+    satiety = int(total["carb"] * 1.4 + total["fat"] * 1.1)
+    heal = int(total["vitamin"] * 0.5)
+    effects: List[StatusEffect] = []
+    pmag = min(int(total["protein"] // 8), 6)
+    if pmag > 0:
+        effects.append(StatusEffect(f"ちから+{pmag}", turns=15 + pmag * 3, power_bonus=pmag))
+    dmag = min(int(total["mineral"] // 8), 6)
+    if dmag > 0:
+        effects.append(StatusEffect(f"まもり+{dmag}", turns=15 + dmag * 3, defense_bonus=dmag))
+
+    if tox >= TOX_SEVERE:
+        return {
+            "name": "あたりそうな料理", "satiety": -20, "heal": 0, "toxic": True,
+            "effects": [StatusEffect("食中毒", turns=30, power_bonus=-3, defense_bonus=-3)],
+        }
+    if tox >= TOX_MILD:
+        return {
+            "name": "あやしい料理", "satiety": max(0, satiety // 2), "heal": 0, "toxic": True,
+            "effects": [StatusEffect("腹痛", turns=18, power_bonus=-1, defense_bonus=-1)],
+        }
+
+    return {
+        "name": _name_for(satiety, heal, pmag, dmag),
+        "satiety": satiety, "heal": heal, "effects": effects, "toxic": False,
+    }
 
 
-def _cook(engine: "Engine", name1: str, name2: str) -> None:
+def _name_for(satiety, heal, pmag, dmag) -> str:
+    scores = [
+        ("ちからの料理", pmag * 4),
+        ("まもりの料理", dmag * 4),
+        ("回復の料理", heal),
+        ("スタミナ料理", satiety // 6),
+    ]
+    strong = sum(1 for _, v in scores if v >= 8)
+    if strong >= 2:
+        return "ごちそう"
+    best = max(scores, key=lambda t: t[1])
+    return best[0] if best[1] >= 2 else "微妙な料理"
+
+
+def cook(engine: "Engine", pot: List[str], method: str) -> None:
     inv = engine.player.inventory.items
-    # 在庫チェック（同じ食材2つなら2個必要）
-    if name1 == name2:
-        if _count(inv, name1) < 2:
-            engine.message_log.add_message(f"{name1} が2つ必要だ。", colors.NO_EFFECT)
-            return
-    elif _count(inv, name1) < 1 or _count(inv, name2) < 1:
-        engine.message_log.add_message("食材が足りない。", colors.NO_EFFECT)
-        return
+    # 鍋の食材を消費
+    for name in pot:
+        for it in inv:
+            if it.name == name:
+                inv.remove(it)
+                break
 
-    _remove_one(inv, name1)
-    _remove_one(inv, name2)
+    res = compute_dish(pot, method)
 
-    template = RECIPES.get(tuple(sorted([name1, name2])))
-    if template is None:
-        inv.append(ef.failed_dish.spawn(0, 0))
-        engine.message_log.add_message("う〜ん、失敗作ができてしまった…", colors.NO_EFFECT)
-        return
+    from components.consumable import FoodDishConsumable
+    from entity import Entity
 
-    dish = template.spawn(0, 0)
+    dish = Entity(
+        sprite="dish", name=res["name"], blocks_movement=False,
+        consumable=FoodDishConsumable(
+            satiety=res["satiety"], heal=res["heal"], effects=res["effects"]
+        ),
+    )
     inv.append(dish)
-    if dish.name not in engine.discovered_dishes:
-        engine.discovered_dishes.add(dish.name)
-        engine.message_log.add_message(f"{dish.name} の作り方を覚えた！", colors.LEVEL_UP)
-    else:
-        engine.message_log.add_message(f"{dish.name} を作った。", colors.ITEM)
+    engine.discovered_dishes.add(res["name"])
+
+    eff_txt = "・".join(e.name for e in res["effects"]) if res["effects"] else "効果なし"
+    color = colors.NO_EFFECT if res["toxic"] else colors.LEVEL_UP
+    engine.message_log.add_message(
+        f"{method}て「{res['name']}」ができた（{eff_txt}）。", color
+    )
