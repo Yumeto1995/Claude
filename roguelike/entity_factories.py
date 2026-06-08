@@ -153,6 +153,27 @@ mushroom_seed = Entity(
     item_category=ItemCategory.MATERIAL,
 )
 
+# --- 畜産・漁業の産物（食材。満腹度回復＋料理素材）---
+egg = Entity(sprite="food", name="卵", blocks_movement=False,
+             consumable=FoodConsumable(amount=15))
+milk = Entity(sprite="food", name="ミルク", blocks_movement=False,
+              consumable=FoodConsumable(amount=20))
+fish = Entity(sprite="food", name="魚", blocks_movement=False,
+              consumable=FoodConsumable(amount=20))
+big_fish = Entity(sprite="food", name="大魚", blocks_movement=False,
+                  consumable=FoodConsumable(amount=35))
+# フグ：生食危険な素材（料理して毒を抜く前提）
+puffer = Entity(sprite="material", name="フグ", blocks_movement=False,
+                item_category=ItemCategory.MATERIAL)
+
+# --- 牧場の動物・漁業のエサ（素材）---
+chicken = Entity(sprite="material", name="ニワトリ", blocks_movement=False,
+                 item_category=ItemCategory.MATERIAL)
+cow = Entity(sprite="material", name="ウシ", blocks_movement=False,
+             item_category=ItemCategory.MATERIAL)
+bait = Entity(sprite="material", name="エサ", blocks_movement=False,
+              item_category=ItemCategory.MATERIAL)
+
 # 料理は固定テンプレートではなく cooking.cook() が動的に生成する。
 
 # --- 大切なもの（捨てられない重要アイテム）---

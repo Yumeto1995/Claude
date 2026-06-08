@@ -24,6 +24,12 @@ NUTRITION: Dict[str, Dict[str, int]] = {
     "キノコ": {"mineral": 18, "protein": 8, "tox": 5},
     "肉":     {"protein": 28, "fat": 12, "tox": 4},
     "毒キノコ": {"mineral": 12, "protein": 6, "tox": 22},
+    # 畜産・漁業の産物
+    "卵":     {"protein": 14, "fat": 10},
+    "ミルク": {"protein": 8, "fat": 8, "mineral": 12},
+    "魚":     {"protein": 22, "fat": 8, "vitamin": 4},
+    "大魚":   {"protein": 34, "fat": 14},
+    "フグ":   {"protein": 24, "tox": 18},
 }
 
 # 調理法 → 栄養素ごとの保持率＋毒性倍率。

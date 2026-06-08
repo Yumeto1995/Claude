@@ -12,6 +12,8 @@ import colors
 import cooking
 import crafting
 import farming
+import fishery
+import ranch
 
 if TYPE_CHECKING:
     from engine import Engine
@@ -24,7 +26,26 @@ TITLES = {
     "alchemy": "アイテム錬金",
     "storage": "収納",
     "farm_plant": "畑：種を植える",
+    "ranch": "牧場（畜産）",
+    "ranch_place": "牧場：動物を入れる",
+    "fishery": "漁業（漁・養殖）",
+    "fishery_place": "漁業：養殖する魚を入れる",
 }
+
+
+def _slot_options(slots, labels, has_src, place_kind, collect_kind):
+    """牧柵/いけすの各スロットを選択肢にする（空き→置く / 育成中→不可 / 完了→収穫）。"""
+    opts = []
+    for i, s in enumerate(slots):
+        if s is None:
+            opts.append({"text": labels(i), "enabled": has_src,
+                         "kind": place_kind, "data": i})
+        elif s["steps_left"] <= 0:
+            opts.append({"text": labels(i), "enabled": True,
+                         "kind": collect_kind, "data": i})
+        else:
+            opts.append({"text": labels(i), "enabled": False, "kind": "noop"})
+    return opts
 
 
 def title(engine: "Engine") -> str:
@@ -83,6 +104,34 @@ def options(engine: "Engine") -> List[Dict[str, Any]]:
         opts.append(_BACK)
         return opts
 
+    if menu == "ranch":
+        opts = _slot_options(
+            engine.ranch_pens, lambda i: ranch.label(engine, i),
+            bool(ranch.animal_names_in(items)), "ranch_place", "ranch_collect")
+        opts.append(_BACK)
+        return opts
+
+    if menu == "ranch_place":
+        opts = [{"text": f"{name} を入れる", "enabled": True, "kind": "ranch_do", "data": name}
+                for name in ranch.animal_names_in(items)]
+        opts.append(_BACK)
+        return opts
+
+    if menu == "fishery":
+        bait = sum(1 for it in items if it.name == "エサ")
+        opts = [{"text": f"釣る（エサ {bait}）", "enabled": bait > 0, "kind": "fish"}]
+        opts += _slot_options(
+            engine.fishery_tanks, lambda i: fishery.label(engine, i),
+            bool(fishery.breed_names_in(items)), "fishery_place", "fishery_collect")
+        opts.append(_BACK)
+        return opts
+
+    if menu == "fishery_place":
+        opts = [{"text": f"{name} を養殖する", "enabled": True, "kind": "fishery_do", "data": name}
+                for name in fishery.breed_names_in(items)]
+        opts.append(_BACK)
+        return opts
+
     return [_BACK]
 
 
@@ -97,6 +146,12 @@ def info(engine: "Engine") -> List[str]:
         return [f"倉庫({len(engine.storage)}): {names}"]
     if menu == "farm_plant":
         return [f"畑{engine.camp_active_plot + 1} に植える"]
+    if menu == "ranch":
+        return ["動物を入れて歩くと、卵やミルクを繰り返し収穫できる。"]
+    if menu == "fishery":
+        return ["エサで釣り、釣った魚は養殖いけすで増やせる。フグは要調理。"]
+    if menu in ("ranch_place", "fishery_place"):
+        return [f"スロット{engine.camp_active_plot + 1} に入れる"]
     return []
 
 
@@ -144,6 +199,24 @@ def select(engine: "Engine") -> None:
     elif kind == "plant":
         farming.plant(engine, cur["data"], engine.camp_active_plot)
         engine.camp_menu = None
+    elif kind == "ranch_place":
+        engine.camp_active_plot = cur["data"]
+        engine.camp_menu, engine.camp_cursor = "ranch_place", 0
+    elif kind == "ranch_collect":
+        ranch.collect(engine, cur["data"])
+    elif kind == "ranch_do":
+        ranch.place(engine, engine.camp_active_plot, cur["data"])
+        engine.camp_menu, engine.camp_cursor = "ranch", 0
+    elif kind == "fish":
+        fishery.fish(engine)
+    elif kind == "fishery_place":
+        engine.camp_active_plot = cur["data"]
+        engine.camp_menu, engine.camp_cursor = "fishery_place", 0
+    elif kind == "fishery_collect":
+        fishery.collect(engine, cur["data"])
+    elif kind == "fishery_do":
+        fishery.place(engine, engine.camp_active_plot, cur["data"])
+        engine.camp_menu, engine.camp_cursor = "fishery", 0
 
 
 def back(engine: "Engine") -> None:
@@ -153,6 +226,10 @@ def back(engine: "Engine") -> None:
     elif menu == "cook":
         engine.cook_pot = []
         engine.camp_menu = None
-    else:  # alchemy / storage / farm_plant
+    elif menu == "ranch_place":
+        engine.camp_menu = "ranch"
+    elif menu == "fishery_place":
+        engine.camp_menu = "fishery"
+    else:  # alchemy / storage / farm_plant / ranch / fishery
         engine.camp_menu = None
     engine.camp_cursor = 0

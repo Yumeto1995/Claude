@@ -212,6 +212,12 @@ class MovementAction(ActionWithDirection):
         if not engine.game_map.tiles["walkable"][dest_x, dest_y]:
             self.consumes_turn = False
             return  # 壁
+        # 斜め移動は縦・横の両隣が床でないと不可（壁の角を斜めにすり抜けない）
+        if self.dx != 0 and self.dy != 0:
+            walk = engine.game_map.tiles["walkable"]
+            if not (walk[entity.x + self.dx, entity.y] and walk[entity.x, entity.y + self.dy]):
+                self.consumes_turn = False
+                return
         if engine.game_map.get_blocking_entity_at(dest_x, dest_y):
             self.consumes_turn = False
             return  # 他のエンティティがいる

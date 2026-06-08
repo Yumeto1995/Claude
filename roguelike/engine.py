@@ -6,7 +6,9 @@ import camp_map
 import colors
 import entity_factories
 import farming
+import fishery
 import item_category
+import ranch
 from actions import EscapeAction
 from fov import compute_fov
 from input_handlers import dispatch_event
@@ -29,8 +31,10 @@ class Engine:
         self.camp_menu = None        # None=拠点を歩いている / 文字列=設備メニュー表示中
         self.camp_cursor = 0
         self.cook_pot = []           # 料理の鍋に入れた食材名のリスト
-        self.camp_active_plot = 0    # 畑メニューで操作中の区画番号
-        self.farm_plots = [None] * 4  # 畑（None=空き / dict=栽培中）
+        self.camp_active_plot = 0    # 畑/牧柵/いけすメニューで操作中のスロット番号
+        self.farm_plots = [None] * 4   # 畑（None=空き / dict=栽培中）
+        self.ranch_pens = [None] * 3   # 牧場の牧柵
+        self.fishery_tanks = [None] * 3  # 漁業の養殖いけす
         self.discovered_dishes = set()  # 作ったことのある料理名
         self.storage = []            # 拠点の倉庫（持ち越し収納）
         self.unlocked_zones = set()  # 開放済み区画（"ranch"/"fishery"）
@@ -91,7 +95,9 @@ class Engine:
         # ターンを消費する行動の後だけ敵が動く（モード切替・壁ぶつかりは消費しない）
         if action.consumes_turn and not self.game_over:
             if (self.player.x, self.player.y) != prev:
-                farming.grow_step(self)  # 1歩あるくと作物が育つ
+                farming.grow_step(self)   # 1歩で作物が育つ
+                ranch.step_grow(self)     # 牧場の産物も育つ
+                fishery.step_grow(self)   # 養殖も育つ
             if not action.is_attack:
                 self.player.fighter.regenerate_stamina()  # 攻撃以外で回復
             # 満腹度を消費。空腹になった瞬間は警告を出す。
@@ -161,10 +167,10 @@ class Engine:
         elif kind.startswith("farm"):
             farming.interact_plot(self, int(kind[4:]))
         elif kind in ("ranch", "fishery"):
-            label = camp_map.STATION_LABELS[kind]
             if kind in self.unlocked_zones:
-                self.message_log.add_message(f"{label}（準備中：次回実装予定）", colors.NO_EFFECT)
+                self.camp_menu, self.camp_cursor = kind, 0
             else:
+                label = camp_map.STATION_LABELS[kind]
                 key = "牧場の鍵" if kind == "ranch" else "漁業の鍵"
                 self.message_log.add_message(
                     f"{label}はまだ使えない。『{key}』を見つけて開放しよう。", colors.NO_EFFECT

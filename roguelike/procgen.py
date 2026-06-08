@@ -114,8 +114,11 @@ def place_items(
             entity_factories.mushroom_seed,
             entity_factories.ranch_key,
             entity_factories.fishery_key,
+            entity_factories.chicken,
+            entity_factories.cow,
+            entity_factories.bait,
         ]
-        weights = [36, 10, 8, 8, 4, 6, 4, 10, 6, 6, 6, 4, 4, 4, 4, 2, 2]
+        weights = [34, 10, 8, 8, 4, 6, 4, 10, 6, 6, 6, 4, 4, 4, 4, 2, 2, 3, 3, 4]
         template = random.choices(templates, weights=weights)[0]
         dungeon.entities.append(template.spawn(x, y))
 

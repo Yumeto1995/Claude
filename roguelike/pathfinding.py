@@ -81,6 +81,9 @@ def find_path(cost: np.ndarray, start: Point, goal: Point) -> List[Point]:
             tile_cost = int(cost[nx, ny])
             if tile_cost == 0:
                 continue  # 壁
+            # 斜めは縦・横の両隣が壁でないこと（壁の角抜け防止）
+            if dx != 0 and dy != 0 and (cost[cx + dx, cy] == 0 or cost[cx, cy + dy] == 0):
+                continue
             tentative = g + tile_cost
             if tentative < g_score.get((nx, ny), 1 << 30):
                 g_score[(nx, ny)] = tentative
