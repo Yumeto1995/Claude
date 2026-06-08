@@ -62,8 +62,8 @@ class HostileEnemy(BaseAI):
         dx = target.x - self.entity.x
         dy = target.y - self.entity.y
 
-        # プレイヤーが上下左右に隣接していれば攻撃（最優先）
-        if abs(dx) + abs(dy) == 1:
+        # プレイヤーが隣接（斜め含む8方向）していれば攻撃（最優先）
+        if max(abs(dx), abs(dy)) == 1:
             MeleeAction(dx, dy).perform(engine, self.entity)
             return
 
@@ -84,8 +84,11 @@ class HostileEnemy(BaseAI):
             ).perform(engine, self.entity)
 
     def _adjacent_enemy(self, engine: "Engine") -> Optional["Entity"]:
-        """上下左右に隣接する『別の生きた敵』を返す。なければ None。"""
-        for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1)):
+        """隣接（斜め含む8方向）する『別の生きた敵』を返す。なければ None。"""
+        for dx, dy in (
+            (1, 0), (-1, 0), (0, 1), (0, -1),
+            (1, 1), (1, -1), (-1, 1), (-1, -1),
+        ):
             other = engine.game_map.get_blocking_entity_at(
                 self.entity.x + dx, self.entity.y + dy
             )
@@ -114,6 +117,9 @@ class ConfusedEnemy(BaseAI):
             return
 
         self.turns_remaining -= 1
-        dx, dy = random.choice([(1, 0), (-1, 0), (0, 1), (0, -1)])
-        # ランダム方向へ。誰か（プレイヤーや他の敵）にぶつかれば攻撃になる。
+        dx, dy = random.choice([
+            (1, 0), (-1, 0), (0, 1), (0, -1),
+            (1, 1), (1, -1), (-1, 1), (-1, -1),
+        ])
+        # ランダム方向（斜め含む）へ。誰かにぶつかれば攻撃になる。
         BumpAction(dx, dy).perform(engine, self.entity)

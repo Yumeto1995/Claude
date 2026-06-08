@@ -49,7 +49,7 @@ def find_path(cost: np.ndarray, start: Point, goal: Point) -> List[Point]:
     gx, gy = goal
 
     def heuristic(x: int, y: int) -> int:
-        return abs(x - gx) + abs(y - gy)
+        return max(abs(x - gx), abs(y - gy))  # 8方向なのでチェビシェフ距離
 
     open_heap: List[Tuple[int, int, Point]] = [(heuristic(*start), 0, start)]
     came_from: Dict[Point, Point] = {}
@@ -71,7 +71,10 @@ def find_path(cost: np.ndarray, start: Point, goal: Point) -> List[Point]:
         visited.add(current)
 
         cx, cy = current
-        for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1)):
+        for dx, dy in (
+            (1, 0), (-1, 0), (0, 1), (0, -1),
+            (1, 1), (1, -1), (-1, 1), (-1, -1),
+        ):
             nx, ny = cx + dx, cy + dy
             if not (0 <= nx < width and 0 <= ny < height):
                 continue

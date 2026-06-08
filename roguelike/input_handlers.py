@@ -27,12 +27,18 @@ from actions import (
 if TYPE_CHECKING:
     from engine import Engine
 
-# キー → 方向 (dx, dy)。矢印・WASD・vi(hjkl) に対応。
+# キー → 方向 (dx, dy)。矢印・WASD・vi(hjkl/yubn)・テンキーに対応。
 _DIRECTIONS = {
+    # 上下左右
     pygame.K_UP: (0, -1), pygame.K_w: (0, -1), pygame.K_k: (0, -1),
     pygame.K_DOWN: (0, 1), pygame.K_s: (0, 1), pygame.K_j: (0, 1),
     pygame.K_LEFT: (-1, 0), pygame.K_a: (-1, 0), pygame.K_h: (-1, 0),
     pygame.K_RIGHT: (1, 0), pygame.K_d: (1, 0), pygame.K_l: (1, 0),
+    # 斜め（vi: yubn）
+    pygame.K_y: (-1, -1), pygame.K_u: (1, -1), pygame.K_b: (-1, 1), pygame.K_n: (1, 1),
+    # テンキー
+    pygame.K_KP8: (0, -1), pygame.K_KP2: (0, 1), pygame.K_KP4: (-1, 0), pygame.K_KP6: (1, 0),
+    pygame.K_KP7: (-1, -1), pygame.K_KP9: (1, -1), pygame.K_KP1: (-1, 1), pygame.K_KP3: (1, 1),
 }
 
 
@@ -128,8 +134,15 @@ def held_movement_action(engine: "Engine") -> Optional[Action]:
             return None  # 設備メニュー中は歩けない
     elif engine.attack_mode or engine.inventory_open:
         return None
+    # 押されている方向キーを合成（↑＋→ などで斜め移動）
     keys = pygame.key.get_pressed()
-    for keycode, (dx, dy) in _DIRECTIONS.items():
+    dx = dy = 0
+    for keycode, (kx, ky) in _DIRECTIONS.items():
         if keys[keycode]:
-            return BumpAction(dx, dy)
-    return None
+            dx += kx
+            dy += ky
+    dx = max(-1, min(1, dx))
+    dy = max(-1, min(1, dy))
+    if dx == 0 and dy == 0:
+        return None
+    return BumpAction(dx, dy)
