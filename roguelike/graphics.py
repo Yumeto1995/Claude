@@ -139,9 +139,12 @@ class Renderer:
         self.view_w = view_w
         self.view_h = view_h
         self.play_h = view_h * TILE_SIZE  # マップ表示領域の高さ
-        self.screen = pygame.display.set_mode(
-            (view_w * TILE_SIZE, self.play_h + self.PANEL_HEIGHT)
-        )
+        size = (view_w * TILE_SIZE, self.play_h + self.PANEL_HEIGHT)
+        # SCALED：論理サイズを保ちつつウィンドウ/全画面に自動スケール（F11でトグル）
+        try:
+            self.screen = pygame.display.set_mode(size, pygame.SCALED)
+        except pygame.error:
+            self.screen = pygame.display.set_mode(size)
         pygame.display.set_caption("Roguelike")
         self.sprites = load_sprites()
         # 探索済み（今は見えない）タイル用の暗いバージョン
@@ -205,6 +208,17 @@ class Renderer:
                 sprite = self.sprites.get(entity.sprite, self.sprites["player"])
                 ox, oy = offsets.get(id(entity), (0, 0))
                 screen.blit(sprite, (ex * TILE_SIZE + ox, ey * TILE_SIZE + oy))
+
+        # セーフルームにいるときは画面右上に表示
+        if engine.game_map.safe[engine.player.x, engine.player.y]:
+            label = self.font.render("セーフルーム", True, colors.HEAL)
+            lw = self.view_w * TILE_SIZE
+            rect = label.get_rect(topright=(lw - 8, 6))
+            bg = pygame.Surface((label.get_width() + 10, label.get_height() + 4))
+            bg.set_alpha(150)
+            bg.fill((0, 0, 0))
+            screen.blit(bg, (rect.x - 5, rect.y - 2))
+            screen.blit(label, rect)
 
         self._render_panel(engine)
 
@@ -456,9 +470,6 @@ class Renderer:
                 if foot is not None:
                     hint_text = f"足元: {foot.name}（G で拾う）"
                     hint_color = colors.ITEM
-                elif engine.game_map.safe[engine.player.x, engine.player.y]:
-                    hint_text = "セーフルーム（テントが使える・敵が入れない）"
-                    hint_color = colors.HEAL
             if hint_text:
                 hint = self.font.render(hint_text, True, hint_color)
                 screen.blit(hint, (width - hint.get_width() - 10, y + self.LINE_HEIGHT))

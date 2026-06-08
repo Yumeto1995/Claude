@@ -1,5 +1,7 @@
 import pygame
 
+import colors
+import savegame
 from engine import Engine
 from graphics import Renderer
 from input_handlers import held_movement_action
@@ -21,9 +23,22 @@ def main():
     try:
         while True:
             renderer.render(engine)
+            events = pygame.event.get()
 
-            # 単発キー（足踏み・モード切替・攻撃・終了）
-            engine.handle_events(pygame.event.get())
+            # システムキー（全画面・セーブ・ロード）
+            for ev in events:
+                if ev.type == pygame.KEYDOWN:
+                    if ev.key == pygame.K_F11:
+                        pygame.display.toggle_fullscreen()
+                    elif ev.key == pygame.K_F5:
+                        savegame.save_game(engine)
+                        engine.message_log.add_message("セーブした。", colors.WELCOME)
+                    elif ev.key == pygame.K_F9 and savegame.has_save():
+                        engine = savegame.load_game()
+                        engine.message_log.add_message("ロードした。", colors.WELCOME)
+
+            # ゲーム操作（足踏み・モード切替・攻撃・終了・拠点操作など）
+            engine.handle_events(events)
 
             # 押しっぱなしの方向キーで連続移動（クールダウンで間引き）
             now = pygame.time.get_ticks()
