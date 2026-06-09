@@ -155,6 +155,43 @@ class Renderer:
         self.big_font = load_font(48)    # ゲームオーバー用
         self.attack_anims = []           # 再生中の攻撃モーション
 
+    CONTROLS = [
+        "移動：矢印 / WASD / vi(hjkl,yubn) / テンキー（斜めも・2方向同時押し可）",
+        "Z：足踏み　Space：移動/攻撃モード切替",
+        "G：足元のアイテムを拾う　i：持ち物（←→で分類、a〜で使用/装備）",
+        "Enter / >：下り階段で次の階へ",
+        "セーフルームで『魔法のテント』を使う→拠点（料理・畑・牧場・漁業・収納）",
+        "F5：セーブ　F9：ロード　F11：全画面切替",
+        "ESC：タイトルへ戻る（自動セーブ）",
+    ]
+
+    def render_title(self, options, cursor: int) -> None:
+        """タイトル画面（メニュー＋操作説明）。"""
+        screen = self.screen
+        w = self.view_w * TILE_SIZE
+        screen.fill((10, 12, 18))
+
+        title = self.big_font.render("ローグライク", True, (255, 230, 120))
+        screen.blit(title, title.get_rect(center=(w // 2, 80)))
+        sub = self.font.render("〜 ダンジョンと拠点づくり 〜", True, (170, 175, 195))
+        screen.blit(sub, sub.get_rect(center=(w // 2, 126)))
+
+        my = 190
+        for i, opt in enumerate(options):
+            selected = i == cursor
+            color = (255, 230, 120) if selected else (210, 210, 220)
+            text = ("▶ " if selected else "   ") + opt
+            surf = self.font.render(text, True, color)
+            screen.blit(surf, surf.get_rect(center=(w // 2, my + i * 38)))
+
+        cy = my + len(options) * 38 + 40
+        screen.blit(self.font.render("── 操作説明 ──", True, (150, 150, 175)), (40, cy))
+        for line in self.CONTROLS:
+            cy += 28
+            screen.blit(self.font.render(line, True, (190, 192, 205)), (40, cy))
+
+        pygame.display.flip()
+
     def render(self, engine: "Engine") -> None:
         screen = self.screen
         screen.fill((0, 0, 0))

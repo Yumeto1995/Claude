@@ -12,6 +12,10 @@ if TYPE_CHECKING:
     from entity import Entity
 
 
+class ReturnToTitle(Exception):
+    """ゲーム中に ESC が押され、タイトル画面に戻ることを表す。"""
+
+
 class Action:
     """すべての行動の基底クラス。perform() で実際の効果を起こす。"""
 
@@ -23,12 +27,12 @@ class Action:
 
 
 class EscapeAction(Action):
-    """ゲームを終了する。"""
+    """タイトル画面に戻る（自動セーブ）。"""
 
     consumes_turn = False
 
     def perform(self, engine: Engine, entity: Entity) -> None:
-        raise SystemExit()
+        raise ReturnToTitle()
 
 
 class WaitAction(Action):
