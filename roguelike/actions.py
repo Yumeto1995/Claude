@@ -255,15 +255,14 @@ class MeleeAction(ActionWithDirection):
             return
 
         damage = entity.fighter.power - target.fighter.defense
-        if damage > 0 and target.fighter.is_hungry:
+        if target.fighter.is_hungry:
             damage = int(damage * HUNGER_DAMAGE_MULT)  # 空腹だと受けるダメージ増
+        damage = max(1, damage)  # 命中すれば最低1ダメージ（防御で完全無効化しない）
         attack_color = colors.PLAYER_ATK if entity is engine.player else colors.ENEMY_ATK
-        desc = f"{entity.name} が {target.name} を攻撃"
-        if damage > 0:
-            engine.message_log.add_message(f"{desc} → {damage} ダメージ", attack_color)
-            combat.inflict_damage(engine, target, damage, attacker=entity)
-        else:
-            engine.message_log.add_message(f"{desc} → 効果がない", colors.NO_EFFECT)
+        engine.message_log.add_message(
+            f"{entity.name} が {target.name} を攻撃 → {damage} ダメージ", attack_color
+        )
+        combat.inflict_damage(engine, target, damage, attacker=entity)
 
 
 class BumpAction(ActionWithDirection):

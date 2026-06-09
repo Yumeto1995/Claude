@@ -66,6 +66,7 @@ class Engine:
                 max_monsters_per_room=max_monsters,
                 max_items_per_room=1,
                 player=self.player,
+                floor=self.current_floor,
             )
             if nonsafe_connected(dungeon):
                 break

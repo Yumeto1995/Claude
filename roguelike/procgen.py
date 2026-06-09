@@ -62,10 +62,25 @@ def tunnel_between(
         yield x, y
 
 
+def _scale_monster(monster: Entity, floor: int) -> None:
+    """階層が深いほど敵を強くする（攻撃力・HP・防御・経験値）。"""
+    f = floor - 1
+    if f <= 0:
+        return
+    fi = monster.fighter
+    if fi is not None:
+        fi.base_power += f // 2
+        fi.base_defense += f // 4
+        fi.max_hp += f * 3
+        fi._hp = fi.max_hp
+    if monster.level is not None:
+        monster.level.xp_given += f * 5
+
+
 def place_entities(
-    room: RectangularRoom, dungeon: GameMap, maximum_monsters: int
+    room: RectangularRoom, dungeon: GameMap, maximum_monsters: int, floor: int
 ) -> None:
-    """1つの部屋にランダムな数の敵を配置する。"""
+    """1つの部屋にランダムな数の敵を配置する（floor で強さをスケール）。"""
     number_of_monsters = random.randint(0, maximum_monsters)
 
     for _ in range(number_of_monsters):
@@ -76,10 +91,10 @@ def place_entities(
         if any(e.x == x and e.y == y for e in dungeon.entities):
             continue
 
-        if random.random() < 0.8:
-            dungeon.entities.append(entity_factories.goblin.spawn(x, y))
-        else:
-            dungeon.entities.append(entity_factories.slime.spawn(x, y))
+        template = entity_factories.goblin if random.random() < 0.8 else entity_factories.slime
+        monster = template.spawn(x, y)
+        _scale_monster(monster, floor)
+        dungeon.entities.append(monster)
 
 
 def place_items(
@@ -132,6 +147,7 @@ def generate_dungeon(
     max_monsters_per_room: int,
     max_items_per_room: int,
     player: Entity,
+    floor: int = 1,
 ) -> GameMap:
     """ランダムなダンジョンを生成して GameMap を返す。"""
     dungeon = GameMap(map_width, map_height)
@@ -167,7 +183,7 @@ def generate_dungeon(
             for x, y in tunnel_between(rooms[-1].center, new_room.center):
                 dungeon.tiles[x, y] = tile_types.floor
             # 2部屋目以降に敵とアイテムを配置
-            place_entities(new_room, dungeon, max_monsters_per_room)
+            place_entities(new_room, dungeon, max_monsters_per_room, floor)
             place_items(new_room, dungeon, max_items_per_room)
 
         center_of_last_room = new_room.center
