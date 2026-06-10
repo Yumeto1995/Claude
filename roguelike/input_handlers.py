@@ -13,14 +13,17 @@ from actions import (
     CampLeaveAction,
     CampMoveCursorAction,
     CampSelectAction,
+    CloseDialogueAction,
     CycleInventoryCategoryAction,
     DescendAction,
     EscapeAction,
     MeleeAction,
+    MovementAction,
     PickupAction,
     ToggleAttackModeAction,
     ToggleInventoryAction,
     UseItemAction,
+    VillageInteractAction,
     WaitAction,
 )
 
@@ -53,6 +56,18 @@ def dispatch_event(event: pygame.event.Event, engine: "Engine") -> Optional[Acti
 
     if event.type == pygame.KEYDOWN:
         key = event.key
+
+        # 村にいる間は専用の操作
+        if getattr(engine, "in_village", False):
+            if getattr(engine, "dialogue", None) is not None:
+                if key in (pygame.K_RETURN, pygame.K_KP_ENTER, pygame.K_ESCAPE):
+                    return CloseDialogueAction()
+                return None
+            if key in (pygame.K_RETURN, pygame.K_KP_ENTER):
+                return VillageInteractAction()  # 入口→ダンジョン / NPC→会話
+            if key == pygame.K_ESCAPE:
+                return EscapeAction()  # タイトルへ
+            return None  # 方向キーはポーリングで移動
 
         # 拠点（テント内）にいる間は専用の操作
         if engine.in_camp:
@@ -129,9 +144,13 @@ def held_movement_action(engine: "Engine") -> Optional[Action]:
     """
     if engine.game_over:
         return None
+    non_combat = engine.in_camp or getattr(engine, "in_village", False)
     if engine.in_camp:
         if engine.camp_menu is not None:
             return None  # 設備メニュー中は歩けない
+    elif getattr(engine, "in_village", False):
+        if getattr(engine, "dialogue", None) is not None:
+            return None  # 会話中は歩けない
     elif engine.attack_mode or engine.inventory_open:
         return None
     # 押されている方向キーを合成（↑＋→ などで斜め移動）
@@ -145,4 +164,5 @@ def held_movement_action(engine: "Engine") -> Optional[Action]:
     dy = max(-1, min(1, dy))
     if dx == 0 and dy == 0:
         return None
-    return BumpAction(dx, dy)
+    # 非戦闘マップ（村・拠点）では攻撃しない＝単純移動
+    return MovementAction(dx, dy) if non_combat else BumpAction(dx, dy)

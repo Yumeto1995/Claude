@@ -9,6 +9,7 @@ import farming
 import fishery
 import item_category
 import ranch
+import village_map
 from actions import EscapeAction
 from fov import compute_fov
 from input_handlers import dispatch_event
@@ -48,7 +49,10 @@ class Engine:
         self.player = entity_factories.player.spawn(0, 0)
         self._give_starting_equipment()
         self.current_floor = 0
-        self.generate_floor()  # 1階を生成
+        # 村（NPCのいる開始地点）の状態
+        self.in_village = False
+        self.dialogue = None
+        self.enter_village()  # ゲームは村から始まる
 
     def generate_floor(self) -> None:
         """次のフロアを生成する（プレイヤーのステータス・持ち物は引き継ぐ）。"""
@@ -87,8 +91,8 @@ class Engine:
         # 死亡後は終了(ESC)以外の操作を受け付けない
         if self.game_over and not isinstance(action, EscapeAction):
             return
-        # 拠点（テント内）はターンが経過しない。移動と設備操作だけ。
-        if self.in_camp:
+        # 拠点（テント内）・村はターンが経過しない。移動と会話/設備操作だけ。
+        if self.in_camp or getattr(self, "in_village", False):
             action.perform(self, self.player)
             return
         prev = (self.player.x, self.player.y)
@@ -131,6 +135,35 @@ class Engine:
         # 料理をすぐ試せるよう食材も少し
         self.player.inventory.items.append(entity_factories.meat.spawn(0, 0))
         self.player.inventory.items.append(entity_factories.herb.spawn(0, 0))
+
+    def enter_village(self) -> None:
+        """村（開始地点）へ。NPCと話し、入口からダンジョンへ向かう。"""
+        self.in_village = True
+        self.in_camp = False
+        self.dialogue = None
+        self.game_map = village_map.build_village_map()
+        self.player.x, self.player.y = village_map.SPAWN
+        self.game_map.entities.append(self.player)
+
+    def enter_dungeon(self) -> None:
+        """村の入口からダンジョン1階へ。"""
+        self.in_village = False
+        self.dialogue = None
+        self.current_floor = 0
+        self.generate_floor()  # 1階を生成（プレイヤー位置もここで決まる）
+        self.message_log.add_message("ダンジョンに足を踏み入れた。", colors.WELCOME)
+
+    def village_interact(self) -> None:
+        """村で Enter：入口ならダンジョンへ、隣接NPCがいれば会話。"""
+        if (self.player.x, self.player.y) == village_map.DUNGEON_ENTRANCE:
+            self.enter_dungeon()
+            return
+        for ent in self.game_map.entities:
+            if getattr(ent, "dialogue", None) and max(
+                abs(ent.x - self.player.x), abs(ent.y - self.player.y)
+            ) == 1:
+                self.dialogue = {"name": ent.name, "lines": ent.dialogue}
+                return
 
     def enter_camp(self) -> None:
         """ダンジョンを退避して、歩けるテント内マップに切り替える。"""

@@ -36,6 +36,7 @@ class Entity:
         equippable: Optional["Equippable"] = None,
         equipment: Optional["Equipment"] = None,
         item_category: Optional["ItemCategory"] = None,
+        dialogue=None,
     ):
         self.x = x
         self.y = y
@@ -71,6 +72,8 @@ class Entity:
         self.item_category = item_category
         # 一時的な状態効果（料理バフなど）。主にプレイヤーが使う。
         self.status_effects = []
+        # 村のNPC用のセリフ（リスト）。NPC以外は None。
+        self.dialogue = dialogue
 
     def spawn(self, x: int, y: int) -> "Entity":
         """このテンプレートの複製を (x, y) に作って返す。"""

@@ -52,6 +52,7 @@ PLACEHOLDER_COLORS: Dict[str, tuple] = {
     "safe_floor": (40, 70, 70),
     "wall": (90, 75, 55),
     "player": (255, 255, 255),
+    "npc": (240, 220, 150),
     "goblin": (80, 200, 80),
     "slime": (80, 200, 200),
     "corpse": (191, 0, 0),
@@ -196,6 +197,15 @@ class Renderer:
         screen = self.screen
         screen.fill((0, 0, 0))
 
+        # 村は専用描画
+        if getattr(engine, "in_village", False):
+            self._render_village_map(engine)
+            self._render_panel(engine)
+            if getattr(engine, "dialogue", None) is not None:
+                self._render_dialogue(engine)
+            pygame.display.flip()
+            return
+
         # 拠点（テント内）は専用描画
         if engine.in_camp:
             self._render_camp_map(engine)
@@ -266,6 +276,75 @@ class Renderer:
             self._render_game_over()
 
         pygame.display.flip()
+
+    def _render_village_map(self, engine: "Engine") -> None:
+        """村マップ（地形・NPC・入口・看板・プレイヤー・案内）。"""
+        import village_map
+
+        screen = self.screen
+        gm = engine.game_map
+        cam_x = max(0, min(engine.player.x - self.view_w // 2, gm.width - self.view_w))
+        cam_y = max(0, min(engine.player.y - self.view_h // 2, gm.height - self.view_h))
+
+        for sy in range(self.view_h):
+            for sx in range(self.view_w):
+                wx, wy = cam_x + sx, cam_y + sy
+                if not gm.in_bounds(wx, wy):
+                    continue
+                sid = gm.tiles["sprite"][wx, wy]
+                if sid == tile_types.SPRITE_WALL:
+                    key = "wall"
+                elif sid == tile_types.SPRITE_DOWNSTAIRS:
+                    key = "stairs_down"
+                else:
+                    key = "floor"
+                screen.blit(self.sprites[key], (sx * TILE_SIZE, sy * TILE_SIZE))
+
+        # 看板（区画名）
+        for text, lx, ly in village_map.LABELS:
+            screen.blit(self.font.render(text, True, (210, 205, 150)),
+                        ((lx - cam_x) * TILE_SIZE, (ly - cam_y) * TILE_SIZE))
+
+        # エンティティ（NPC→プレイヤーの順）
+        for ent in sorted(gm.entities, key=lambda e: e is engine.player):
+            ex, ey = ent.x - cam_x, ent.y - cam_y
+            if 0 <= ex < self.view_w and 0 <= ey < self.view_h:
+                spr = self.sprites.get(ent.sprite, self.sprites["player"])
+                screen.blit(spr, (ex * TILE_SIZE, ey * TILE_SIZE))
+
+        # 足元/隣の案内
+        px, py = engine.player.x, engine.player.y
+        hint = None
+        if (px, py) == village_map.DUNGEON_ENTRANCE:
+            hint = "Enter で ダンジョンへ"
+        else:
+            for ent in gm.entities:
+                if getattr(ent, "dialogue", None) and max(abs(ent.x - px), abs(ent.y - py)) == 1:
+                    hint = f"Enter で {ent.name} と話す"
+                    break
+        if hint:
+            screen.blit(self.font.render(hint, True, colors.DESCEND), (8, self.play_h - 28))
+
+    def _render_dialogue(self, engine: "Engine") -> None:
+        d = engine.dialogue
+        screen = self.screen
+        w = self.view_w * TILE_SIZE
+        bx, bw = 20, w - 40
+        bh = 44 + len(d["lines"]) * 28 + 20
+        by = self.play_h - bh - 16
+
+        box = pygame.Surface((bw, bh))
+        box.set_alpha(238)
+        box.fill((15, 16, 28))
+        screen.blit(box, (bx, by))
+        pygame.draw.rect(screen, (120, 120, 150), (bx, by, bw, bh), 2)
+
+        screen.blit(self.font.render(f"【{d['name']}】", True, (255, 230, 120)), (bx + 14, by + 10))
+        for i, line in enumerate(d["lines"]):
+            screen.blit(self.font.render(line, True, (225, 225, 235)),
+                        (bx + 18, by + 44 + i * 28))
+        tip = self.font.render("Enter で閉じる", True, (150, 150, 165))
+        screen.blit(tip, (bx + bw - tip.get_width() - 12, by + bh - 26))
 
     def _render_camp_map(self, engine: "Engine") -> None:
         """歩けるテント内マップ（地形・設備・区画名・プレイヤー・案内）。"""
@@ -491,8 +570,8 @@ class Renderer:
             mode_label, mode_color = "[移動モード]", (150, 200, 150)
         screen.blit(self.font.render(mode_label, True, mode_color), (x, y))
 
-        # 階層表示・文脈ヒント（ダンジョン中のみ。拠点では設備案内を別途出す）
-        if not engine.in_camp:
+        # 階層表示・文脈ヒント（ダンジョン中のみ。村/拠点では別途案内）
+        if not engine.in_camp and not getattr(engine, "in_village", False):
             floor_surf = self.font.render(
                 f"地下 {engine.current_floor} 階", True, colors.DESCEND
             )

@@ -22,4 +22,15 @@ def save_game(engine, path: str = SAVE_PATH) -> None:
 
 def load_game(path: str = SAVE_PATH):
     with open(path, "rb") as f:
-        return pickle.load(f)
+        engine = pickle.load(f)
+    # 後方互換：新しい属性が無い古いセーブを補完する
+    defaults = {
+        "in_village": False, "dialogue": None,
+        "ranch_pens": [None] * 3, "fishery_tanks": [None] * 3,
+        "unlocked_zones": set(), "storage": [],
+        "camp_menu": None, "cook_pot": [],
+    }
+    for attr, default in defaults.items():
+        if not hasattr(engine, attr):
+            setattr(engine, attr, default)
+    return engine

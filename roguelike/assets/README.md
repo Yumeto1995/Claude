@@ -22,6 +22,7 @@
 | ファイル | 用途 |
 |----------|------|
 | `player.png` | プレイヤー |
+| `npc.png` | 村人（NPC） |
 | `goblin.png` | ゴブリン |
 | `slime.png` | スライム |
 | `corpse.png` | 倒した敵（死体） |

@@ -191,6 +191,24 @@ class CampLeaveAction(Action):
         engine.leave_camp()
 
 
+class VillageInteractAction(Action):
+    """村で足元/隣を調べる（入口→ダンジョン、NPC→会話）。"""
+
+    consumes_turn = False
+
+    def perform(self, engine: Engine, entity: Entity) -> None:
+        engine.village_interact()
+
+
+class CloseDialogueAction(Action):
+    """会話ウィンドウを閉じる。"""
+
+    consumes_turn = False
+
+    def perform(self, engine: Engine, entity: Entity) -> None:
+        engine.dialogue = None
+
+
 class ActionWithDirection(Action):
     """方向 (dx, dy) を持つ行動の共通基底。"""
 
