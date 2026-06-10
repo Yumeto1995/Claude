@@ -249,6 +249,7 @@ class MovementAction(ActionWithDirection):
             return
 
         entity.move(self.dx, self.dy)
+        engine.pending_moves.append((entity, self.dx, self.dy))  # 歩行アニメを予約
 
 
 class MeleeAction(ActionWithDirection):

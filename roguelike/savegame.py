@@ -28,7 +28,7 @@ def load_game(path: str = SAVE_PATH):
         "in_village": False, "dialogue": None,
         "ranch_pens": [None] * 3, "fishery_tanks": [None] * 3,
         "unlocked_zones": set(), "storage": [],
-        "camp_menu": None, "cook_pot": [],
+        "camp_menu": None, "cook_pot": [], "pending_moves": [],
     }
     for attr, default in defaults.items():
         if not hasattr(engine, attr):

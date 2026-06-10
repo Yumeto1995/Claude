@@ -44,6 +44,28 @@ class AttackAnim:
         # sin で 0→最大→0 と踏み込んで戻る
         amount = math.sin(t * math.pi) * self.LUNGE
         return (self.dx * amount, self.dy * amount)
+
+
+class MoveAnim:
+    """移動したエンティティが、前のタイルから滑り込み＋小さく跳ねる歩行モーション。"""
+
+    DURATION = 0.12  # 移動間隔(120ms)とほぼ同じ
+    HOP = 5          # 跳ねる高さ(px)
+
+    def __init__(self, entity, dx: int, dy: int):
+        self.entity = entity
+        self.dx = dx
+        self.dy = dy
+        self.start = time.time()
+
+    def offset(self):
+        t = (time.time() - self.start) / self.DURATION
+        if t >= 1.0:
+            return None
+        ease = 1.0 - t  # 旧タイルからの残り距離（1→0）
+        ox = -self.dx * TILE_SIZE * ease
+        oy = -self.dy * TILE_SIZE * ease - math.sin(t * math.pi) * self.HOP
+        return (ox, oy)
 ASSETS_DIR = os.path.join(os.path.dirname(__file__), "assets")
 
 # スプライトのキー → 仮タイルの色（assets に PNG が無いとき使う）
@@ -154,7 +176,7 @@ class Renderer:
         }
         self.font = load_font(22)        # HP・ログ用
         self.big_font = load_font(48)    # ゲームオーバー用
-        self.attack_anims = []           # 再生中の攻撃モーション
+        self.anims = []                  # 再生中のモーション（攻撃・歩行）
 
     CONTROLS = [
         "移動：矢印 / WASD / vi(hjkl,yubn) / テンキー（斜めも・2方向同時押し可）",
@@ -305,12 +327,14 @@ class Renderer:
             screen.blit(self.font.render(text, True, (210, 205, 150)),
                         ((lx - cam_x) * TILE_SIZE, (ly - cam_y) * TILE_SIZE))
 
-        # エンティティ（NPC→プレイヤーの順）
+        # エンティティ（NPC→プレイヤーの順）。歩行アニメのオフセットを適用。
+        offsets = self._update_animations(engine)
         for ent in sorted(gm.entities, key=lambda e: e is engine.player):
             ex, ey = ent.x - cam_x, ent.y - cam_y
             if 0 <= ex < self.view_w and 0 <= ey < self.view_h:
                 spr = self.sprites.get(ent.sprite, self.sprites["player"])
-                screen.blit(spr, (ex * TILE_SIZE, ey * TILE_SIZE))
+                ox, oy = offsets.get(id(ent), (0, 0))
+                screen.blit(spr, (ex * TILE_SIZE + ox, ey * TILE_SIZE + oy))
 
         # 足元/隣の案内
         px, py = engine.player.x, engine.player.y
@@ -375,10 +399,13 @@ class Renderer:
                 ((lx - cam_x) * TILE_SIZE, (ly - cam_y) * TILE_SIZE),
             )
 
-        # プレイヤー
+        # プレイヤー（歩行アニメのオフセットを適用）
+        offsets = self._update_animations(engine)
+        pox, poy = offsets.get(id(engine.player), (0, 0))
         screen.blit(
             self.sprites["player"],
-            ((engine.player.x - cam_x) * TILE_SIZE, (engine.player.y - cam_y) * TILE_SIZE),
+            ((engine.player.x - cam_x) * TILE_SIZE + pox,
+             (engine.player.y - cam_y) * TILE_SIZE + poy),
         )
 
         # 足元の設備案内
@@ -518,20 +545,22 @@ class Renderer:
         return dark
 
     def _update_animations(self, engine: "Engine") -> Dict[int, tuple]:
-        """engine の予約を取り込み、再生中モーションのオフセットを集計して返す。"""
+        """engine の予約（攻撃・歩行）を取り込み、オフセットを集計して返す。"""
         for entity, dx, dy in engine.drain_animations():
-            self.attack_anims.append(AttackAnim(entity, dx, dy))
+            self.anims.append(AttackAnim(entity, dx, dy))
+        for entity, dx, dy in engine.drain_moves():
+            self.anims.append(MoveAnim(entity, dx, dy))
 
         offsets: Dict[int, tuple] = {}
         active = []
-        for anim in self.attack_anims:
+        for anim in self.anims:
             off = anim.offset()
             if off is None:
                 continue  # 再生終了
             active.append(anim)
             ox, oy = offsets.get(id(anim.entity), (0.0, 0.0))
             offsets[id(anim.entity)] = (ox + off[0], oy + off[1])
-        self.attack_anims = active
+        self.anims = active
         return offsets
 
     def _render_panel(self, engine: "Engine") -> None:

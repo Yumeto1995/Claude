@@ -41,8 +41,9 @@ class Engine:
         self.unlocked_zones = set()  # 開放済み区画（"ranch"/"fishery"）
         self.dungeon_map = None      # 拠点滞在中、ダンジョンマップを退避
         self.dungeon_pos = (0, 0)
-        # 攻撃モーションの予約 [(entity, dx, dy), ...]。Renderer が取り出して再生する。
+        # 攻撃・移動モーションの予約 [(entity, dx, dy), ...]。Renderer が再生する。
         self.pending_animations = []
+        self.pending_moves = []
         self.message_log = MessageLog()
         self.message_log.add_message("ダンジョンへようこそ。", colors.WELCOME)
         # プレイヤーはテンプレートから複製して用意（位置は生成時に決まる）
@@ -244,6 +245,12 @@ class Engine:
         anims = self.pending_animations
         self.pending_animations = []
         return anims
+
+    def drain_moves(self):
+        """予約された移動モーション（歩行）を取り出して空にする。"""
+        moves = getattr(self, "pending_moves", [])
+        self.pending_moves = []
+        return moves
 
     def handle_enemy_turns(self) -> None:
         # AI を持つエンティティ（＝敵）だけが行動する。プレイヤーは ai=None。
