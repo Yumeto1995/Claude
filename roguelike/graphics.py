@@ -614,6 +614,18 @@ class Renderer:
                     surf = self._floor_surface(base, smask, dark)
                 screen.blit(surf, pos)
 
+    # 屋外の草地バリアント。基本を多めに、装飾はまばらに混ぜる重み付きリスト。
+    GRASS_VARIANTS = (
+        "grass", "grass", "grass", "grass", "grass",
+        "grass_clover", "grass_clover", "grass_flower", "grass_stone", "grass_dirt",
+    )
+
+    def _grass_for(self, tx: int, ty: int) -> pygame.Surface:
+        """タイル座標から決定的に草バリアントを選ぶ（毎フレーム同じ柄）。"""
+        h = ((tx * 73856093) ^ (ty * 19349663)) & 0x7FFFFFFF
+        key = self.GRASS_VARIANTS[h % len(self.GRASS_VARIANTS)]
+        return self.sprites.get(key, self.sprites["grass"])
+
     def _draw_terrain(self, gm, cam_x: float, cam_y: float, surf_of) -> None:
         """ピクセルカメラに合わせて地形タイルを敷き詰める。
 
@@ -726,6 +738,8 @@ class Renderer:
                 return self.sprites["door"]
             if sid == tile_types.SPRITE_DOWNSTAIRS:
                 return self.sprites["stairs_down"]
+            if floor_key == "grass":
+                return self._grass_for(tx, ty)   # 屋外はタイル毎に草を敷き分ける
             return self.sprites[floor_key]
         self._draw_terrain(gm, cam_x, cam_y, terrain)
 

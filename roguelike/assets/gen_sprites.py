@@ -112,6 +112,17 @@ def draw_humanoid(P, direction, pose):
         rect(s, bx0, by1 - 2, bx1, by1, P["belt"])
         if P.get("buckle"):
             rect(s, (bx0 + bx1) // 2 - 1, by1 - 2, (bx0 + bx1) // 2 + 1, by1, P["buckle"])
+    if P.get("loincloth"):  # 腰布（ゴブリン等）：胴の下に台形で垂らす
+        lc, lc_s = P["loincloth"], P["loincloth_s"]
+        cxm = (bx0 + bx1) // 2
+        rect(s, bx0 + 1, by1 - 1, bx1 - 1, by1 + 4, lc)
+        rect(s, cxm - 3, by1 + 4, cxm + 3, by1 + 7, lc)
+        rect(s, bx0 + 1, by1 + 3, bx1 - 1, by1 + 4, lc_s)
+    if P.get("strap"):      # 斜め掛けの革ベルト
+        st = P["strap"]
+        for i in range(0, 18):
+            px(s, bx0 + 2 + i, by0 + 1 + i, st)
+            px(s, bx0 + 3 + i, by0 + 1 + i, st)
 
     # ---- 腕（歩行で前後にスイング。攻撃は武器側を前へ）----
     arm_y0, arm_y1 = 34 + bob, 45 + bob
@@ -254,13 +265,15 @@ PALETTES = {
         "mouth": "normal",
     },
     "goblin": {
-        "OL": (30, 50, 28),
-        "skin": (112, 172, 80), "skin_l": (154, 204, 114), "skin_s": (72, 122, 50),
-        "hair": (90, 140, 64), "hair_l": (120, 168, 86), "hair_s": (60, 100, 44),
-        "top": (124, 92, 60), "top_l": (150, 116, 78), "top_s": (88, 64, 42),
-        "leg": (96, 150, 70), "leg_s": (66, 112, 48), "boot": (66, 112, 48), "boot_s": (48, 88, 36),
+        "OL": (24, 44, 22),
+        "skin": (120, 184, 84), "skin_l": (168, 218, 122), "skin_s": (74, 128, 52),
+        "hair": (86, 134, 60), "hair_l": (118, 166, 84), "hair_s": (56, 96, 42),
+        "top": (120, 88, 56), "top_l": (148, 114, 76), "top_s": (84, 60, 40),
+        "leg": (102, 158, 74), "leg_s": (66, 112, 48), "boot": (70, 52, 36), "boot_s": (48, 36, 26),
+        "loincloth": (158, 122, 70), "loincloth_s": (112, 84, 48),
+        "strap": (70, 50, 34),
         "weapon": "club", "wood": (128, 96, 58), "wood_l": (160, 124, 78),
-        "ears": True, "eye": (250, 226, 90), "mouth": "fang",
+        "ears": True, "eye": (252, 208, 70), "mouth": "fang",
     },
 }
 

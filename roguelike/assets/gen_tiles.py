@@ -59,13 +59,71 @@ def make_surface(base, spec, rng, pebbles=0, peb_colors=None):
     return s
 
 
-def make_grass(rng):
-    base = (74, 112, 58)
-    s = make_surface(base, 12, rng)
-    for _ in range(40):  # 草の葉のちらつき
-        x, y = rng.randint(1, S - 2), rng.randint(1, S - 3)
-        c = rng.choice([(96, 140, 70), (60, 96, 48)])
-        s.set_at((x, y), (*c, 255)); s.set_at((x, y + 1), (*c, 255))
+def _blob(s, cx, cy, r, col, density=1.0, rng=None):
+    """(cx,cy) 半径 r の塊を density の確率で塗る（小石・土・葉の塊用）。"""
+    for yy in range(int(cy - r), int(cy + r + 1)):
+        for xx in range(int(cx - r), int(cx + r + 1)):
+            if 0 <= xx < S and 0 <= yy < S and (xx - cx) ** 2 + (yy - cy) ** 2 <= r * r:
+                if rng is None or rng.random() < density:
+                    s.set_at((xx, yy), (*col, 255))
+
+
+def make_grass(rng, variant: int = 0):
+    """ふさふさの草地タイル。複数バリアントを敷き分けて密度・彩りを出す。
+
+    variant: 0=基本 / 1=花 / 2=クローバー(濃い草) / 3=小石 / 4=土の擦れ。
+    芝の塊ムラ＋短い縦ストロークの葉＋先端ハイライトで、見下ろしの草原に見せる。
+    """
+    base = (80, 120, 62)
+    s = make_surface(base, 9, rng)
+    # 下地の明暗ムラ（芝が塊で生えている感じ）
+    for _ in range(8):
+        cx, cy = rng.randint(4, S - 4), rng.randint(4, S - 4)
+        tone = rng.choice([(70, 104, 52), (90, 132, 70)])
+        _blob(s, cx, cy, rng.randint(6, 12), tone, density=0.55, rng=rng)
+    # 草の葉（短い縦ストローク＋先端の明るい点）
+    blade_cols = [(98, 142, 72), (114, 162, 84), (64, 98, 48)]
+    for _ in range(95):
+        x, y = rng.randint(1, S - 2), rng.randint(4, S - 2)
+        h = rng.randint(2, 4)
+        c = rng.choice(blade_cols)
+        for k in range(h):
+            if 0 <= y - k < S:
+                s.set_at((x, y - k), (*c, 255))
+        if y - h >= 0:
+            s.set_at((x, y - h), (152, 198, 112, 255))  # 先端ハイライト
+
+    if variant == 1:        # 小さな花（赤・黄・白・紫）
+        for _ in range(rng.randint(2, 4)):
+            fx, fy = rng.randint(7, S - 7), rng.randint(7, S - 7)
+            petal = rng.choice([(240, 230, 120), (236, 116, 128),
+                                (242, 242, 250), (186, 142, 238)])
+            for dx, dy in ((-1, 0), (1, 0), (0, -1), (0, 1)):
+                s.set_at((fx + dx, fy + dy), (*petal, 255))
+            s.set_at((fx, fy), (250, 208, 86, 255))  # 花芯
+    elif variant == 2:      # クローバー風の濃い草の塊
+        for _ in range(rng.randint(2, 3)):
+            cx, cy = rng.randint(7, S - 7), rng.randint(7, S - 7)
+            for dx, dy in ((-2, 0), (2, 0), (0, -2), (0, 2),
+                           (-1, -1), (1, 1), (1, -1), (-1, 1)):
+                if 0 <= cx + dx < S and 0 <= cy + dy < S:
+                    s.set_at((cx + dx, cy + dy), (54, 108, 50, 255))
+            s.set_at((cx, cy), (44, 92, 44, 255))
+    elif variant == 3:      # 小石（明暗2階調で立体感）
+        for _ in range(rng.randint(3, 5)):
+            sx, sy = rng.randint(5, S - 5), rng.randint(5, S - 5)
+            r = rng.randint(1, 3)
+            stone = rng.choice([(150, 150, 158), (122, 120, 128)])
+            _blob(s, sx, sy, r, stone)
+            s.set_at((sx - 1, sy - 1), (196, 196, 204, 255))  # 光
+    elif variant == 4:      # 土の擦れ（地面が見える）
+        cx, cy = rng.randint(16, S - 16), rng.randint(16, S - 16)
+        r = rng.randint(8, 12)
+        for yy in range(cy - r, cy + r):
+            for xx in range(cx - r, cx + r):
+                if 0 <= xx < S and 0 <= yy < S and (xx - cx) ** 2 + (yy - cy) ** 2 <= r * r:
+                    if rng.random() < 0.82:
+                        s.set_at((xx, yy), (*rng.choice([(150, 120, 82), (132, 104, 70)]), 255))
     return s
 
 
@@ -182,7 +240,12 @@ def make_door(rng):
 def generate():
     vrng = random.Random(20240601)
     extras = {
-        "grass": make_grass(vrng), "tree": make_tree(vrng),
+        "grass": make_grass(vrng, 0),
+        "grass_flower": make_grass(vrng, 1),
+        "grass_clover": make_grass(vrng, 2),
+        "grass_stone": make_grass(vrng, 3),
+        "grass_dirt": make_grass(vrng, 4),
+        "tree": make_tree(vrng),
         "wood_wall": make_wood_wall(vrng), "wood_floor": make_wood_floor(vrng),
         "door": make_door(vrng),
         "stairs_up": make_stairs(vrng, up=True),
