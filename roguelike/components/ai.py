@@ -8,6 +8,7 @@ import numpy as np
 import colors
 from actions import BumpAction, MeleeAction, MovementAction
 from pathfinding import find_path
+from rl import obs as rl_obs
 
 if TYPE_CHECKING:
     from engine import Engine
@@ -95,6 +96,76 @@ class HostileEnemy(BaseAI):
             if other is not None and other is not engine.player and other.ai is not None:
                 return other
         return None
+
+
+class RLEnemy(HostileEnemy):
+    """学習済みの方策（Qテーブル）で動く敵。★強化学習の本番側。
+
+    rl/policy.npz（`python3 -m rl.train` で生成）をクラスで1回だけ読み込み、
+    全個体で共有する。クラス属性なのでセーブデータ（pickle）には含まれない。
+
+    フォールバック（HostileEnemy と同じ動き）になる場合：
+    - 方策ファイルが無い・壊れている・観測設計が古い
+    - プレイヤーが観測の丸め幅（±4マス）より遠い → A* で追跡
+    """
+
+    _qtable = None       # 全個体で共有するQテーブル（numpy配列）
+    _load_tried = False  # 起動後1回だけ読み込みを試す
+
+    @classmethod
+    def _policy(cls):
+        if not cls._load_tried:
+            cls._load_tried = True
+            try:
+                from rl.qlearning import load_qtable  # 遅延import（起動を軽く）
+                cls._qtable = load_qtable()
+            except Exception:
+                cls._qtable = None
+        return cls._qtable
+
+    def perform(self, engine: "Engine") -> None:
+        # プレイヤーから見えていない敵は動かない（暗闇では眠っている）
+        if not engine.game_map.visible[self.entity.x, self.entity.y]:
+            return
+
+        target = engine.player
+        dx = target.x - self.entity.x
+        dy = target.y - self.entity.y
+
+        q = self._policy()
+        if q is None or max(abs(dx), abs(dy)) > rl_obs.CLAMP:
+            # 方策なし／遠距離は従来のルールベース（A*追跡）
+            return super().perform(engine)
+
+        # 同士討ちの気まぐれは従来通り残す（プレイヤー非隣接時のみ）
+        if max(abs(dx), abs(dy)) > 1:
+            foe = self._adjacent_enemy(engine)
+            if foe is not None and random.random() < INFIGHT_CHANCE:
+                MeleeAction(
+                    foe.x - self.entity.x, foe.y - self.entity.y
+                ).perform(engine, self.entity)
+                return
+
+        # Q値の高い行動から順に、実行できるものを選ぶ
+        # （壁・他の敵・セーフルームで動けない行動はスキップ）
+        state = rl_obs.encode(self.entity, target)
+        for action in np.argsort(q[state])[::-1]:
+            adx, ady = rl_obs.ACTIONS[action]
+            if (adx, ady) == (0, 0):
+                return  # 待機が最善 → 何もしない
+            blocking = engine.game_map.get_blocking_entity_at(
+                self.entity.x + adx, self.entity.y + ady
+            )
+            if blocking is target:
+                MeleeAction(adx, ady).perform(engine, self.entity)
+                return
+            if blocking is not None:
+                continue  # 他の敵がいるマス
+            move = MovementAction(adx, ady)
+            move.perform(engine, self.entity)
+            if move.consumes_turn:
+                return  # 実際に動けたら終わり
+        # どの行動もできなければ待機
 
 
 class ConfusedEnemy(BaseAI):

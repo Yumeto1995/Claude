@@ -4,7 +4,7 @@ sprite は assets/<sprite>.png に対応する。画像が無ければ graphics.
 """
 from __future__ import annotations
 
-from components.ai import HostileEnemy
+from components.ai import HostileEnemy, RLEnemy
 from components.consumable import (
     ConfusionConsumable,
     FoodConsumable,
@@ -31,15 +31,18 @@ player = Entity(
     equipment=Equipment(),
 )
 
+# ゴブリンは強化学習の方策（rl/policy.npz）で動く。
+# 方策ファイルが無ければ従来のA*追跡と同じ動きになる。
 goblin = Entity(
     sprite="goblin",
     name="ゴブリン",
     blocks_movement=True,
-    ai_cls=HostileEnemy,
+    ai_cls=RLEnemy,
     fighter=Fighter(hp=10, defense=0, power=3),
     level=Level(xp_given=35),
 )
 
+# スライムはルールベースのまま（RLゴブリンとの行動比較用）
 slime = Entity(
     sprite="slime",
     name="スライム",
