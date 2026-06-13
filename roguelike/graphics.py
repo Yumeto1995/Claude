@@ -233,13 +233,15 @@ def load_sprites() -> Dict[str, pygame.Surface]:
 class Renderer:
     """ウィンドウを持ち、カメラ追従でマップ・エンティティ・下部UIを描く。"""
 
-    PANEL_HEIGHT = 192   # 下部パネル（HP/Lv＋ログ）の高さ
+    PANEL_HEIGHT = 184   # 下部パネル（HP/Lv＋ログ）。14*64+184=1080（フルHD）
     LOG_LINES = 4        # ログの表示行数
     LINE_HEIGHT = 28
 
-    def __init__(self, view_w: int, view_h: int):
+    def __init__(self, view_w: int, view_h: int, panel_height: int = None):
         self.view_w = view_w
         self.view_h = view_h
+        if panel_height is not None:
+            self.PANEL_HEIGHT = panel_height  # 解像度ごとに下部パネル高を上書き
         self.play_h = view_h * TILE_SIZE  # マップ表示領域の高さ
         size = (view_w * TILE_SIZE, self.play_h + self.PANEL_HEIGHT)
         # SCALED：論理サイズを保ちつつウィンドウ/全画面に自動スケール（F11でトグル）
@@ -408,6 +410,47 @@ class Renderer:
 
         pygame.display.flip()
 
+    def render_settings(self, options, cursor: int, note: str = "") -> None:
+        """画面設定（解像度選択）。options は表示用文字列のリスト。"""
+        screen = self.screen
+        w = self.view_w * TILE_SIZE
+        h = self.play_h + self.PANEL_HEIGHT
+
+        # 夜空風グラデ背景（タイトルと統一）
+        band = 4
+        for i in range(h // band + 1):
+            t = i / (h // band)
+            color = (int(7 + 9 * t), int(8 + 12 * t), int(14 + 22 * t))
+            pygame.draw.rect(screen, color, (0, i * band, w, band))
+
+        title = "画面設定（解像度）"
+        tw = self.big_font.size(title)[0]
+        tx, ty = (w - tw) // 2, 56
+        screen.blit(self.big_font.render(title, True, (6, 6, 10)), (tx + 4, ty + 4))
+        screen.blit(self.big_font.render(title, True, self.TEXT_GOLD), (tx, ty))
+
+        mw = 460
+        mh = 26 + len(options) * 40 + 12
+        mx, my = (w - mw) // 2, 176
+        self._draw_window(mx, my, mw, mh)
+        for i, opt in enumerate(options):
+            oy = my + 20 + i * 40
+            if i == cursor:
+                pygame.draw.rect(screen, (46, 52, 86), (mx + 8, oy - 5, mw - 16, 34))
+                pygame.draw.rect(screen, (104, 112, 168), (mx + 8, oy - 5, mw - 16, 34), 1)
+                pygame.draw.rect(screen, self.TEXT_GOLD, (mx + 8, oy - 5, 3, 34))
+                self._text("▶", mx + 22, oy, color=self.TEXT_GOLD, bold=True)
+            color = self.TEXT_GOLD if i == cursor else self.TEXT_MAIN
+            self._text(opt, mx + 56, oy, color=color, bold=(i == cursor))
+
+        if note:
+            self._text(note, (w - self.font.size(note)[0]) // 2, my + mh + 16,
+                       color=self.TEXT_DIM, shadow=False)
+        tip = "↑↓：選択　Enter：適用　ESC：戻る　F11：全画面"
+        self._text(tip, (w - self.font.size(tip)[0]) // 2, my + mh + 44,
+                   color=self.TEXT_DIM, shadow=False)
+        pygame.display.flip()
+
     def _camera_px(self, engine: "Engine") -> tuple:
         """プレイヤーのスムージング済み位置にピクセル単位で追従するカメラ。
 
@@ -421,9 +464,19 @@ class Renderer:
         vw, vh = self.view_w * TILE_SIZE, self.view_h * TILE_SIZE
         cam_x = px + TILE_SIZE / 2 - vw / 2
         cam_y = py + TILE_SIZE / 2 - vh / 2
-        cam_x = max(0.0, min(cam_x, gm.width * TILE_SIZE - vw))
-        cam_y = max(0.0, min(cam_y, gm.height * TILE_SIZE - vh))
-        return cam_x, cam_y
+        return self._clamp_cam(cam_x, gm.width * TILE_SIZE, vw), \
+            self._clamp_cam(cam_y, gm.height * TILE_SIZE, vh)
+
+    @staticmethod
+    def _clamp_cam(cam: float, world: float, view: float) -> float:
+        """カメラ位置を世界内にクランプ。世界がビューより小さい軸は中央寄せ。
+
+        村の建物内（13×9）など、ビュー(30×14)より小さいマップで両脇が
+        黒帯にならないよう、収まりきる軸はマップを画面中央に置く。
+        """
+        if world <= view:
+            return (world - view) / 2.0   # 負値＝マップを中央へ寄せる
+        return max(0.0, min(cam, world - view))
 
     # ダンジョンの階層テーマ（浅層＝洞窟 / 深層＝石）。
     CAVE_MAX_FLOOR = 3
