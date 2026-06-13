@@ -7,7 +7,7 @@ if TYPE_CHECKING:
 
 # スタミナ・満腹度の調整値（ここを変えればバランス調整できる）
 DEFAULT_ATTACK_STAMINA_COST = 30  # 武器未装備（素手）時の攻撃消費スタミナ
-STAMINA_REGEN = 10                # 攻撃以外のターンで回復するスタミナ
+STAMINA_REGEN = 12                # 攻撃以外のターンで回復するスタミナ
 SATIETY_DRAIN = 1                 # 1ターンに減る満腹度
 HUNGER_STAMINA_MULT = 1.5         # 空腹時の攻撃消費スタミナ倍率
 HUNGER_DAMAGE_MULT = 1.5          # 空腹時に受けるダメージ倍率

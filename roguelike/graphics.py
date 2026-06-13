@@ -199,30 +199,34 @@ def _make_placeholder(key: str) -> pygame.Surface:
     return surf
 
 
-# キャラの追加ポーズ。あれば自動で読み込み、描画側が状況に応じて差し替える。
-#   _attack = 攻撃モーション中 / _walk1,_walk2 = 移動中に交互表示（歩行）
-SPRITE_VARIANTS = ("_attack", "_walk1", "_walk2")
-
-
 def load_sprites() -> Dict[str, pygame.Surface]:
-    """全スプライトを読み込む。PNG が無ければ仮タイルで代用。
+    """assets 内の PNG をすべて読み込む（ファイル名＝キー）。
 
-    `<キー>.png` に加え、あれば `<キー>_attack/_walk1/_walk2.png` も読む。
+    方向別・歩行・攻撃のコマ（例 player_down_walk1.png）もそのまま全部読む。
+    `*_left*` のキーからは水平反転で `*_right*` を自動生成する（右向き＝左向きの鏡像）。
+    PLACEHOLDER_COLORS にあって PNG が無いキーは仮タイルで代用。
     32px 原寸の地形・アイテムは TILE_SIZE への整数倍拡大でくっきり表示される。
     """
     sprites: Dict[str, pygame.Surface] = {}
+    if os.path.isdir(ASSETS_DIR):
+        for fn in os.listdir(ASSETS_DIR):
+            if not fn.endswith(".png"):
+                continue
+            try:
+                img = pygame.image.load(os.path.join(ASSETS_DIR, fn)).convert_alpha()
+            except pygame.error:
+                continue
+            sprites[fn[:-4]] = pygame.transform.scale(img, (TILE_SIZE, TILE_SIZE))
+    # 左向きから右向きを鏡像生成（右向き専用PNGが無いときだけ）
+    for key in list(sprites):
+        if "_left" in key:
+            rkey = key.replace("_left", "_right")
+            if rkey not in sprites:
+                sprites[rkey] = pygame.transform.flip(sprites[key], True, False)
+    # PNG が無い必須キーは仮タイルで代用
     for key in PLACEHOLDER_COLORS:
-        path = os.path.join(ASSETS_DIR, f"{key}.png")
-        if os.path.exists(path):
-            img = pygame.image.load(path).convert_alpha()
-            sprites[key] = pygame.transform.scale(img, (TILE_SIZE, TILE_SIZE))
-        else:
+        if key not in sprites:
             sprites[key] = _make_placeholder(key)
-        for suf in SPRITE_VARIANTS:
-            vpath = os.path.join(ASSETS_DIR, f"{key}{suf}.png")
-            if os.path.exists(vpath):
-                img = pygame.image.load(vpath).convert_alpha()
-                sprites[f"{key}{suf}"] = pygame.transform.scale(img, (TILE_SIZE, TILE_SIZE))
     return sprites
 
 
@@ -264,6 +268,7 @@ class Renderer:
         self.step_t0 = {}                # id(entity) → そのマスに踏み出した時刻
         self.walking = set()             # 目標へ移動中のエンティティ id（脚アニメ用）
         self.walk_step = {}              # id(entity) → 歩数（walk1/walk2 の交互判定）
+        self.facing = {}                 # id(entity) → 向き "down"/"up"/"left"/"right"
         self.now = 0.0                   # 現在時刻（_update_animations で更新）
         self._last_frame_t = None        # 前フレームの時刻（dt 計算用）
         # オートタイルの合成結果キャッシュ（向き別の壁・床影は隣接状況で決まる）
@@ -1041,20 +1046,41 @@ class Renderer:
     STEP_DT = 0.13   # 1歩の見かけ時間(秒)。踏み出し時刻からの経過で位相を取る
     PASS_AT = 0.6    # 位相がこの割合を超えたら passing（足をそろえる）に切替
 
+    @staticmethod
+    def _dir_from(dx: int, dy: int) -> str:
+        """移動/攻撃の (dx,dy) から向きを決める（横優先＝斜めは左右を向く）。"""
+        if dx == 0 and dy == 0:
+            return "down"
+        if abs(dx) >= abs(dy):
+            return "left" if dx < 0 else "right"
+        return "up" if dy < 0 else "down"
+
+    def _resolve(self, base: str, d: str, suffix: str) -> "Optional[str]":
+        """`base_d_suffix` → `base_suffix` → `base_d` → `base` の順で在るキーを返す。"""
+        for cand in (f"{base}_{d}{suffix}", f"{base}{suffix}", f"{base}_{d}", base):
+            if cand in self.sprites:
+                return cand
+        return None
+
     def _sprite_key_for(self, entity) -> str:
-        """状況に応じたスプライトキーを返す（攻撃ポーズ＞歩行コマ＞通常）。"""
+        """状況＋向きに応じたスプライトキー（攻撃ポーズ＞歩行コマ＞通常、方向別）。"""
         key = entity.sprite
         eid = id(entity)
-        if eid in self.attacking and f"{key}_attack" in self.sprites:
-            return f"{key}_attack"
+        d = self.facing.get(eid, "down")
+        if eid in self.attacking:
+            r = self._resolve(key, d, "_attack")
+            if r:
+                return r
         if eid in self.walking:
             # 踏み出してからの経過で位相を取り、前半=踏み出し / 後半=足そろえ
             phase = (self.now - self.step_t0.get(eid, self.now)) / self.STEP_DT
             if phase < self.PASS_AT:
                 stride = "_walk1" if self.walk_step.get(eid, 0) % 2 == 0 else "_walk2"
-                if f"{key}{stride}" in self.sprites:
-                    return f"{key}{stride}"
-        return key
+                r = self._resolve(key, d, stride)
+                if r:
+                    return r
+        # idle：向きだけ反映
+        return self._resolve(key, d, "") or key
 
     def _draw_shadow(self, px: float, py: float) -> None:
         """キャラの足元に落ちる楕円影（接地感を出す）。"""
@@ -1099,6 +1125,7 @@ class Renderer:
         # 攻撃モーション・エフェクトの取り込み（移動予約は位置追従で扱うので捨てる）
         for entity, dx, dy in engine.drain_animations():
             self.anims.append(AttackAnim(entity, dx, dy))
+            self.facing[id(entity)] = self._dir_from(dx, dy)  # 攻撃した向きを向く
         engine.drain_moves()
         for fx in engine.drain_fx():
             kind = fx[0]
@@ -1135,10 +1162,12 @@ class Renderer:
                 if eid in self.last_tile:
                     self.walk_step[eid] = self.walk_step.get(eid, 0) + 1
                     self.step_t0[eid] = now
+                    px, py = self.last_tile[eid]
+                    self.facing[eid] = self._dir_from(ent.x - px, ent.y - py)  # 進む向き
                 self.last_tile[eid] = (ent.x, ent.y)
 
         # 退場したエンティティ（フロア移動で入れ替わる敵など）の記録を掃除
-        for d in (self.render_pos, self.last_tile, self.step_t0, self.walk_step):
+        for d in (self.render_pos, self.last_tile, self.step_t0, self.walk_step, self.facing):
             for k in [k for k in d if k not in live]:
                 del d[k]
 

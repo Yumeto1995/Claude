@@ -1,12 +1,13 @@
 """64×64 キャラスプライトを pygame だけで生成する（依存追加なし）。
 
-市販ドット絵風を狙い、各色を 3〜4 階調にして光源=左上で陰影を付ける。
-背景は完全透過。`python3 gen_sprites.py` で assets 直下に
-player/npc/goblin/slime/corpse（＋歩行2フレーム *_walk1/_walk2）を再生成する。
-色や形を変えたいときはここを編集する。
+向き（下/上/左）×ポーズ（静止/歩行2コマ/攻撃）を生成する。右向きは描画側で
+左向きを水平反転して使う（graphics.load_sprites）。全身（脚＋腕）を振って歩き、
+攻撃は向いた方向へ武器を突き出す。
 
-歩行フレーム：step=0 が静止（idle＝<name>.png）、step=1/2 が左右の踏み出し。
-graphics.py が移動アニメ中に walk1/walk2 を交互表示して「歩く」動きになる。
+出力例： player_down.png / player_down_walk1.png / player_left_attack.png …
+静止の下向き（例 player_down.png）と、後方互換の素キー（player.png＝下向き静止）も出す。
+
+色や形を変えたいときは PALETTES と draw_humanoid を編集する。
 """
 import os
 
@@ -16,13 +17,14 @@ import pygame
 pygame.init()
 
 S = 64
-TRANSPARENT = (0, 0, 0, 0)
 ASSETS_DIR = os.path.dirname(os.path.abspath(__file__))
+DIRS = ("down", "up", "left")
+POSES = ("idle", "walk1", "walk2", "attack")
 
 
 def surf():
     s = pygame.Surface((S, S), pygame.SRCALPHA)
-    s.fill(TRANSPARENT)
+    s.fill((0, 0, 0, 0))
     return s
 
 
@@ -44,16 +46,14 @@ def disc(s, cx, cy, r, c):
                 px(s, x, y, c)
 
 
-def ball(s, cx, cy, r, base, light, shadow, outline):
-    """左上光源の陰影付きの球。outline→shadow→base(上左ずらし)→light。"""
-    disc(s, cx, cy, r + 1, outline)
+def ball(s, cx, cy, r, base, light, shadow, ol):
+    disc(s, cx, cy, r + 1, ol)
     disc(s, cx, cy, r, shadow)
     disc(s, cx - 1.4, cy - 1.4, r, base)
     disc(s, cx - r * 0.34, cy - r * 0.34, r * 0.52, light)
 
 
-def outline_pass(s, outline):
-    """不透明ピクセルの外側に1pxアウトラインを足して縁を締める。"""
+def outline_pass(s, ol):
     src = s.copy()
     for y in range(S):
         for x in range(S):
@@ -62,167 +62,217 @@ def outline_pass(s, outline):
             for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1)):
                 nx, ny = x + dx, y + dy
                 if 0 <= nx < S and 0 <= ny < S and src.get_at((nx, ny))[3] > 200:
-                    px(s, x, y, outline)
+                    px(s, x, y, ol)
                     break
 
 
-def legs(s, step, lx, rx, top, bot, leg, leg_s, boot, boot_s):
-    """2本脚を描く。前後に大きくずらして「右足・左足」の踏み出しを表現する。
+# ============================================================ 共通の人型描画
+def _limb(s, cx, top, bot, w, col, shade):
+    """縦の手足。左側に陰。"""
+    rect(s, cx - w, top, cx + w, bot, col)
+    rect(s, cx - w, top, cx - w, bot, shade)
 
-    step=0：両足そろえ（静止/足をそろえる passing）
-    step=1：左足を前（下へ伸ばす）・右足を後ろ（縮める）
-    step=2：その逆。1/2 を交互に出すと歩いて見える。
-    """
-    FWD, BACK = 2, 4   # 前足は下へ+2、後ろ足は上へ-4 ＝大きなストライド
-    if step == 1:
-        lb, rb = bot + FWD, bot - BACK
-    elif step == 2:
-        lb, rb = bot - BACK, bot + FWD
+
+def draw_humanoid(P, direction, pose):
+    """人型キャラ（プレイヤー/村人/ゴブリン）を向き・ポーズ付きで描く。"""
+    s = surf()
+    OL = P["OL"]
+    bob = -1 if pose in ("walk1", "walk2") else 0   # 歩行中は全身が1px浮く
+    lean = 0
+    if pose == "attack":
+        lean = {"down": (0, 1), "up": (0, -1), "left": (-2, 0)}[direction][0]
+
+    # ---- 脚（全身歩行：左右交互に踏み出す）----
+    lx, rx = 27, 37
+    ltop, lbot = 49 + bob, 57
+    if direction == "left":
+        lx, rx = 29, 35  # 前足・後ろ足
+    if pose == "walk1":
+        loff, roff = (2, -3)      # 左/前を踏み出し
+    elif pose == "walk2":
+        loff, roff = (-3, 2)
     else:
-        lb, rb = bot, bot
-    for cx, b in ((lx, lb), (rx, rb)):
-        rect(s, cx - 1, top, cx + 1, b, leg)
-        rect(s, cx - 1, top, cx - 1, b, leg_s)      # 脚の右影
-        rect(s, cx - 1, b - 1, cx + 2, b, boot)     # 靴（前向き）
-        rect(s, cx - 1, b, cx + 2, b, boot_s)
+        loff, roff = (0, 0)
+    for cx, off in ((lx + lean, loff), (rx + lean, roff)):
+        b = lbot + off
+        _limb(s, cx, ltop, b, 2, P["leg"], P["leg_s"])
+        rect(s, cx - 2, b - 1, cx + 2, b, P["boot"])
+        rect(s, cx - 2, b, cx + 2, b, P["boot_s"])
 
+    # ---- 胴 ----
+    bx0, bx1 = 22 + lean, 42 + lean
+    by0, by1 = 31 + bob, 48 + bob
+    if direction == "left":
+        bx0, bx1 = 25 + lean, 39 + lean
+    ball(s, (bx0 + bx1) // 2, by1 - 4, (bx1 - bx0) // 2 + 1, P["top"], P["top_l"], P["top_s"], OL)
+    rect(s, bx0, by0, bx1, by1, P["top"])
+    rect(s, bx0, by0, bx0 + 1, by1, P["top_l"])
+    rect(s, bx1 - 1, by0 + 1, bx1, by1, P["top_s"])
+    if P.get("belt"):
+        rect(s, bx0, by1 - 2, bx1, by1, P["belt"])
+        if P.get("buckle"):
+            rect(s, (bx0 + bx1) // 2 - 1, by1 - 2, (bx0 + bx1) // 2 + 1, by1, P["buckle"])
 
-# ============================================================ プレイヤー（剣士）
-def make_player(step):
-    s = surf()
-    OL = (28, 24, 44)
-    skin = (236, 200, 158); skin_l = (250, 226, 192); skin_s = (198, 158, 120)
-    hair = (138, 88, 48); hair_l = (178, 124, 70); hair_s = (96, 56, 32)
-    tun = (58, 112, 202); tun_l = (100, 158, 236); tun_s = (40, 76, 152)
-    pant = (92, 72, 56); pant_s = (60, 46, 36); boot = (66, 48, 38); boot_s = (44, 32, 26)
-    steel = (208, 216, 232); steel_l = (246, 250, 255); gold = (226, 186, 78)
+    # ---- 腕（歩行で前後にスイング。攻撃は武器側を前へ）----
+    arm_y0, arm_y1 = 34 + bob, 45 + bob
+    swing = {"walk1": (2, -2), "walk2": (-2, 2), "idle": (0, 0), "attack": (0, 0)}[pose]
+    if direction == "left":
+        # 横向き：手前の腕だけ見せる（前後にスイング）
+        fa = 19 + lean + (swing[0])
+        _limb(s, fa, arm_y0 + max(0, -swing[0]), arm_y1, 2, P["top"], P["top_s"])
+        rect(s, fa - 2, arm_y1, fa + 1, arm_y1 + 2, P["skin"])
+    else:
+        la, ra = bx0 - 1, bx1 + 1
+        _limb(s, la, arm_y0 + swing[0], arm_y1 + swing[0], 1, P["top"], P["top_s"])
+        _limb(s, ra, arm_y0 + swing[1], arm_y1 + swing[1], 1, P["top"], P["top_s"])
+        rect(s, la - 1, arm_y1 + swing[0], la + 1, arm_y1 + 2 + swing[0], P["skin"])
+        rect(s, ra - 1, arm_y1 + swing[1], ra + 1, arm_y1 + 2 + swing[1], P["skin"])
 
-    legs(s, step, 27, 37, 49, 57, pant, pant_s, boot, boot_s)
-    # 胴（青チュニック）
-    ball(s, 32, 41, 11, tun, tun_l, tun_s, OL)
-    rect(s, 22, 34, 42, 47, tun)
-    rect(s, 22, 34, 24, 47, tun_l); rect(s, 40, 35, 42, 48, tun_s)
-    # ベルト＋バックル
-    rect(s, 22, 46, 42, 48, pant_s); rect(s, 30, 46, 33, 48, gold)
-    # 腕＋手
-    rect(s, 18, 35, 21, 46, tun); rect(s, 43, 35, 46, 45, tun)
-    rect(s, 18, 44, 21, 47, skin); rect(s, 43, 43, 46, 46, skin)
-    # 剣（右手・縦。刃に光のエッジ）
-    rect(s, 48, 18, 50, 45, steel); rect(s, 48, 18, 48, 45, steel_l)
-    rect(s, 46, 43, 52, 45, gold); rect(s, 48, 45, 50, 49, hair_s)
-    px(s, 49, 16, steel_l)
-    # 頭
-    ball(s, 32, 20, 12, skin, skin_l, skin_s, OL)
-    # 髪（上半分＋もみあげ）
-    disc(s, 32, 16, 12.5, hair)
-    disc(s, 32, 11, 11, hair_l)
-    disc(s, 32, 23, 11, skin)            # 顔を出す
-    rect(s, 20, 24, 44, 32, skin)
-    rect(s, 20, 15, 21, 26, hair); rect(s, 43, 15, 44, 26, hair)  # もみあげ
-    px(s, 24, 17, hair_l); px(s, 40, 17, hair_l)
-    # 顔
-    for ex in (27, 38):
-        rect(s, ex - 1, 21, ex + 1, 23, (248, 248, 255))
-        rect(s, ex, 22, ex + 1, 23, (44, 46, 78))
-        px(s, ex - 1, 21, skin_l)
-    px(s, 32, 25, skin_s); px(s, 33, 25, skin_s)        # 鼻
-    rect(s, 30, 28, 34, 28, skin_s)                      # 口
-    px(s, 23, 25, skin_s); px(s, 41, 25, skin_s)         # 頬
+    # ---- 頭 ----
+    hcx, hcy, hr = 32 + lean, 20 + bob, 12
+    ball(s, hcx, hcy, hr, P["skin"], P["skin_l"], P["skin_s"], OL)
+    _head_features(s, P, direction, hcx, hcy, hr)
+
+    # ---- 耳（ゴブリン）----
+    if P.get("ears"):
+        _ears(s, P, direction, hcx, hcy)
+
+    # ---- 武器 ----
+    if P.get("weapon"):
+        _weapon(s, P, direction, pose, bob, lean)
+
     outline_pass(s, OL)
     return s
 
 
-# ============================================================ 村人（NPC）
-def make_npc(step):
-    s = surf()
-    OL = (40, 34, 28)
-    skin = (232, 196, 156); skin_l = (248, 222, 188); skin_s = (196, 156, 118)
-    hair = (180, 174, 166); hair_l = (210, 206, 200); hair_s = (132, 126, 120)
-    robe = (120, 138, 86); robe_l = (152, 170, 112); robe_s = (84, 100, 58)
-    apron = (150, 116, 74); apron_s = (110, 82, 52)
-
-    legs(s, step, 28, 36, 50, 57, robe_s, (70, 84, 48), (96, 74, 50), (70, 54, 36))
-    rect(s, 24, 48, 40, 54, robe_s)      # ローブ裾
-    # 胴（ローブ）
-    ball(s, 32, 42, 12, robe, robe_l, robe_s, OL)
-    rect(s, 20, 34, 44, 50, robe)
-    rect(s, 20, 34, 22, 50, robe_l); rect(s, 42, 35, 44, 50, robe_s)
-    # 前掛け
-    rect(s, 26, 38, 38, 52, apron); rect(s, 26, 38, 27, 52, apron_s)
-    rect(s, 26, 52, 38, 52, apron_s)
-    # 腕＋手
-    rect(s, 16, 36, 19, 48, robe); rect(s, 45, 36, 48, 48, robe)
-    rect(s, 16, 46, 19, 49, skin); rect(s, 45, 46, 48, 49, skin)
-    # 頭
-    ball(s, 32, 20, 12, skin, skin_l, skin_s, OL)
-    disc(s, 32, 16, 12.5, hair); disc(s, 32, 11, 11, hair_l)
-    disc(s, 32, 24, 11, skin); rect(s, 20, 25, 44, 32, skin)
-    rect(s, 19, 16, 20, 28, hair); rect(s, 44, 16, 45, 28, hair)  # もみあげ
-    # 顔（穏やか）
-    rect(s, 26, 23, 28, 23, OL); rect(s, 37, 23, 39, 23, OL)
-    px(s, 32, 26, skin_s)
-    rect(s, 29, 29, 35, 29, skin_s); rect(s, 30, 30, 34, 30, skin_s)  # 口ひげ陰
-    px(s, 23, 26, skin_s); px(s, 41, 26, skin_s)
-    outline_pass(s, OL)
-    return s
-
-
-# ============================================================ ゴブリン
-def make_goblin(step):
-    s = surf()
-    OL = (30, 50, 28)
-    skin = (112, 172, 80); skin_l = (154, 204, 114); skin_s = (72, 122, 50)
-    loin = (124, 92, 60); loin_s = (88, 64, 42)
-    wood = (128, 96, 58); wood_l = (160, 124, 78)
-    eye = (250, 226, 90); pupil = (40, 30, 20); tooth = (240, 245, 235)
-
-    legs(s, step, 27, 37, 50, 58, skin, skin_s, skin_s, (52, 92, 36))
-    # 胴
-    ball(s, 32, 42, 9, skin, skin_l, skin_s, OL)
-    rect(s, 24, 38, 40, 50, skin)
-    rect(s, 24, 38, 25, 50, skin_l); rect(s, 38, 39, 40, 50, skin_s)
-    rect(s, 24, 48, 40, 52, loin); rect(s, 24, 52, 40, 52, loin_s)  # 腰布
-    # 腕
-    rect(s, 18, 38, 22, 42, skin); rect(s, 42, 40, 46, 46, skin)
-    rect(s, 18, 38, 19, 42, skin_s)
-    # 棍棒（左手・斜め上）
-    for r, (cx, cy) in zip((3, 4, 5, 5), [(16, 36), (14, 31), (12, 26), (12, 22)]):
-        disc(s, cx, cy, r, wood)
-    disc(s, 11, 22, 2.4, wood_l)
-    # 耳（大きくとがる）
-    pygame.draw.polygon(s, skin, [(16, 18), (6, 12), (18, 24)])
-    pygame.draw.polygon(s, skin, [(48, 18), (58, 12), (46, 24)])
-    px(s, 11, 16, skin_l); px(s, 53, 16, skin_l)
-    # 頭（横長）
-    ball(s, 32, 24, 13, skin, skin_l, skin_s, OL)
-    # 顔（つり目・ずる賢い）
-    rect(s, 22, 22, 26, 25, eye); rect(s, 38, 22, 42, 25, eye)
-    rect(s, 24, 23, 26, 25, pupil); rect(s, 38, 23, 40, 25, pupil)
-    rect(s, 21, 20, 25, 21, OL); rect(s, 39, 20, 43, 21, OL)   # つり眉
-    # 口（歯をむく）
-    rect(s, 25, 30, 39, 32, OL)
-    for tx in (27, 30, 33, 36):
-        px(s, tx, 30, tooth); px(s, tx, 31, tooth)
-    px(s, 22, 28, skin_s); px(s, 42, 28, skin_s)
-    px(s, 32, 27, skin_s)                                       # 鼻
-    outline_pass(s, OL)
-    return s
+def _head_features(s, P, direction, hcx, hcy, hr):
+    OL = P["OL"]
+    skin, skin_s = P["skin"], P["skin_s"]
+    hair, hair_l = P["hair"], P["hair_l"]
+    if direction == "up":
+        # 後頭部：髪で覆う、顔は無し
+        disc(s, hcx, hcy - 1, hr, hair)
+        disc(s, hcx, hcy - 4, hr - 1, hair_l)
+        rect(s, hcx - hr, hcy + 4, hcx + hr, hcy + hr, skin_s)  # うなじ
+        return
+    # 髪（上半分）
+    disc(s, hcx, hcy - 4, hr + 0.5, hair)
+    disc(s, hcx, hcy - 8, hr - 1, hair_l)
+    disc(s, hcx, hcy + 3, hr - 1, skin)        # 顔を出す
+    if direction == "down":
+        eye = P.get("eye")
+        for ex in (hcx - 5, hcx + 4):
+            if eye:  # ゴブリン等の色付き目
+                rect(s, ex - 1, hcy + 1, ex + 1, hcy + 2, eye)
+                px(s, ex, hcy + 1, OL)
+            else:
+                rect(s, ex - 1, hcy, ex + 1, hcy + 2, (248, 248, 255))
+                rect(s, ex, hcy + 1, ex + 1, hcy + 2, (44, 46, 78))
+        px(s, hcx, hcy + 4, skin_s)
+        if P.get("mouth") == "fang":
+            rect(s, hcx - 4, hcy + 6, hcx + 4, hcy + 7, OL)
+            for tx in range(hcx - 3, hcx + 4, 2):
+                px(s, tx, hcy + 6, (240, 245, 235))
+        else:
+            rect(s, hcx - 2, hcy + 6, hcx + 2, hcy + 6, skin_s)
+    else:  # left（横顔）：手前(左)に目1つ＋鼻
+        eye = P.get("eye")
+        ex = hcx - 5
+        if eye:
+            rect(s, ex - 1, hcy + 1, ex, hcy + 2, eye); px(s, ex, hcy + 1, OL)
+        else:
+            rect(s, ex - 1, hcy, ex, hcy + 2, (248, 248, 255)); px(s, ex - 1, hcy + 1, (44, 46, 78))
+        px(s, hcx - hr + 1, hcy + 3, skin_s)   # 鼻先
+        rect(s, hcx - 5, hcy + 6, hcx - 1, hcy + 6, skin_s)
+        # 後頭部側を髪で厚く
+        rect(s, hcx + 2, hcy - hr + 4, hcx + hr, hcy + 4, hair)
 
 
-# ============================================================ スライム
+def _ears(s, P, direction, hcx, hcy):
+    skin, skin_l = P["skin"], P["skin_l"]
+    if direction == "left":
+        pygame.draw.polygon(s, skin, [(hcx + 8, hcy - 4), (hcx + 18, hcy - 9), (hcx + 8, hcy + 2)])
+        px(s, hcx + 13, hcy - 5, skin_l)
+    else:
+        pygame.draw.polygon(s, skin, [(hcx - 9, hcy - 3), (hcx - 19, hcy - 8), (hcx - 8, hcy + 3)])
+        pygame.draw.polygon(s, skin, [(hcx + 9, hcy - 3), (hcx + 19, hcy - 8), (hcx + 8, hcy + 3)])
+        px(s, hcx - 14, hcy - 4, skin_l); px(s, hcx + 14, hcy - 4, skin_l)
+
+
+def _weapon(s, P, direction, pose, bob, lean):
+    kind = P["weapon"]
+    if kind == "sword":
+        blade, light, hilt = P["steel"], P["steel_l"], P["gold"]
+        if pose == "attack":
+            if direction == "down":
+                rect(s, 30, 49, 33, 60, blade); rect(s, 30, 49, 30, 60, light)
+                rect(s, 28, 48, 35, 49, hilt)
+            elif direction == "up":
+                rect(s, 30, 4, 33, 18, blade); rect(s, 30, 4, 30, 18, light)
+                rect(s, 28, 18, 35, 19, hilt)
+            else:  # left
+                rect(s, 2, 33, 16, 36, blade); rect(s, 2, 33, 16, 33, light)
+                rect(s, 16, 31, 17, 38, hilt)
+        else:
+            x = 47 + lean
+            rect(s, x, 22 + bob, x + 2, 46 + bob, blade)
+            rect(s, x, 22 + bob, x, 46 + bob, light)
+            rect(s, x - 2, 45 + bob, x + 4, 46 + bob, hilt)
+            px(s, x + 1, 20 + bob, light)
+    elif kind == "club":
+        wood, wl = P["wood"], P["wood_l"]
+        if pose == "attack":
+            head = {"down": (32, 56), "up": (32, 8), "left": (8, 34)}[direction]
+            for r, (cx, cy) in zip((3, 4, 5), [(32, 46), head, head]):
+                disc(s, cx, cy, r, wood)
+            disc(s, head[0], head[1], 2, wl)
+        else:
+            for r, (cx, cy) in zip((3, 4, 5, 5), [(16, 36 + bob), (14, 31 + bob), (12, 26 + bob), (12, 22 + bob)]):
+                disc(s, cx, cy, r, wood)
+            disc(s, 11, 22 + bob, 2.4, wl)
+
+
+# ============================================================ パレット
+PALETTES = {
+    "player": {
+        "OL": (28, 24, 44),
+        "skin": (236, 200, 158), "skin_l": (250, 226, 192), "skin_s": (198, 158, 120),
+        "hair": (138, 88, 48), "hair_l": (178, 124, 70), "hair_s": (96, 56, 32),
+        "top": (58, 112, 202), "top_l": (100, 158, 236), "top_s": (40, 76, 152),
+        "belt": (70, 50, 36), "buckle": (226, 186, 78),
+        "leg": (92, 72, 56), "leg_s": (60, 46, 36), "boot": (66, 48, 38), "boot_s": (44, 32, 26),
+        "weapon": "sword", "steel": (208, 216, 232), "steel_l": (246, 250, 255), "gold": (226, 186, 78),
+        "mouth": "normal",
+    },
+    "npc": {
+        "OL": (40, 34, 28),
+        "skin": (232, 196, 156), "skin_l": (248, 222, 188), "skin_s": (196, 156, 118),
+        "hair": (180, 174, 166), "hair_l": (210, 206, 200), "hair_s": (132, 126, 120),
+        "top": (120, 138, 86), "top_l": (152, 170, 112), "top_s": (84, 100, 58),
+        "belt": (150, 116, 74),
+        "leg": (96, 74, 50), "leg_s": (70, 54, 36), "boot": (96, 74, 50), "boot_s": (70, 54, 36),
+        "mouth": "normal",
+    },
+    "goblin": {
+        "OL": (30, 50, 28),
+        "skin": (112, 172, 80), "skin_l": (154, 204, 114), "skin_s": (72, 122, 50),
+        "hair": (90, 140, 64), "hair_l": (120, 168, 86), "hair_s": (60, 100, 44),
+        "top": (124, 92, 60), "top_l": (150, 116, 78), "top_s": (88, 64, 42),
+        "leg": (96, 150, 70), "leg_s": (66, 112, 48), "boot": (66, 112, 48), "boot_s": (48, 88, 36),
+        "weapon": "club", "wood": (128, 96, 58), "wood_l": (160, 124, 78),
+        "ears": True, "eye": (250, 226, 90), "mouth": "fang",
+    },
+}
+
+
+# ============================================================ スライム・死体（無方向）
 def make_slime(step):
     s = surf()
     OL = (26, 52, 96)
     base = (74, 152, 222); light = (150, 206, 246); shadow = (44, 102, 172)
     deep = (28, 70, 132); hi = (236, 250, 255); eye = (22, 34, 58)
-
-    # step で squash/stretch（弾むブロブ）
-    rx = {0: 21, 1: 24, 2: 19}[step]
-    ry = {0: 18, 1: 14, 2: 21}[step]
-    cy = 58 - ry          # 底を 58 に揃える
-    flat = 58
-
-    # ドーム本体（下が平ら）
+    rx = {0: 21, 1: 24, 2: 19}[step]; ry = {0: 18, 1: 14, 2: 21}[step]
+    cy = 58 - ry; flat = 58
     for y in range(int(cy - ry), flat + 1):
         for x in range(64):
             if y <= cy:
@@ -230,8 +280,7 @@ def make_slime(step):
                     px(s, x, y, base)
             elif abs(x - 32) <= rx:
                 px(s, x, y, base)
-    rect(s, 32 - rx + 1, flat - 1, 32 + rx - 1, flat, deep)  # 底のフチ
-    # 陰影（右下を暗く・左上を明るく）
+    rect(s, 32 - rx + 1, flat - 1, 32 + rx - 1, flat, deep)
     for y in range(64):
         for x in range(64):
             if s.get_at((x, y))[3] == 0:
@@ -242,27 +291,21 @@ def make_slime(step):
             if d > rx * 1.5:
                 px(s, x, y, deep)
     disc(s, 32 - rx * 0.35, cy - ry * 0.1, rx * 0.42, light)
-    # 内部の気泡
     disc(s, 40, cy + 4, 3, shadow); disc(s, 40, cy + 4, 1.5, light)
-    # 大ハイライト
     disc(s, 24, cy - 4, 4, hi); px(s, 30, cy - 7, hi); px(s, 19, cy + 2, hi)
-    # 目・口
-    eye_y = cy + 2
-    rect(s, 25, eye_y, 27, eye_y + 3, eye); rect(s, 37, eye_y, 39, eye_y + 3, eye)
-    px(s, 25, eye_y, hi); px(s, 37, eye_y, hi)
-    rect(s, 30, eye_y + 5, 34, eye_y + 5, eye)
-    px(s, 29, eye_y + 4, eye); px(s, 35, eye_y + 4, eye)
+    ey = cy + 2
+    rect(s, 25, ey, 27, ey + 3, eye); rect(s, 37, ey, 39, ey + 3, eye)
+    px(s, 25, ey, hi); px(s, 37, ey, hi)
+    rect(s, 30, ey + 5, 34, ey + 5, eye); px(s, 29, ey + 4, eye); px(s, 35, ey + 4, eye)
     outline_pass(s, OL)
     return s
 
 
-# ============================================================ 死体（亡骸＋骨）
-def make_corpse(step):
+def make_corpse():
     s = surf()
     OL = (40, 40, 50)
     body = (122, 122, 134); body_l = (152, 152, 164); body_s = (88, 88, 100)
     bone = (226, 220, 206); bone_s = (182, 176, 162)
-
     for y in range(44, 58):
         for x in range(12, 52):
             if (x - 32) ** 2 / 360 + (y - 53) ** 2 / 60 <= 1:
@@ -275,28 +318,36 @@ def make_corpse(step):
                 px(s, x, y, body_s)
             elif y <= 47:
                 px(s, x, y, body_l)
-    # 頭蓋骨
     disc(s, 21, 46, 6, bone)
-    rect(s, 18, 45, 19, 47, OL); rect(s, 22, 45, 23, 47, OL)  # 眼窩
+    rect(s, 18, 45, 19, 47, OL); rect(s, 22, 45, 23, 47, OL)
     px(s, 21, 49, bone_s); px(s, 20, 50, OL); px(s, 22, 50, OL)
-    # あばら骨
     for bx in (32, 36, 40):
         rect(s, bx, 48, bx, 54, bone); px(s, bx, 48, bone_s)
-    rect(s, 30, 50, 42, 50, bone_s)   # 背骨
+    rect(s, 30, 50, 42, 50, bone_s)
     outline_pass(s, OL)
     return s
 
 
-SPRITES = {
-    "player": make_player, "npc": make_npc, "goblin": make_goblin,
-    "slime": make_slime, "corpse": make_corpse,
-}
-WALKERS = {"player", "npc", "goblin", "slime"}  # 歩行フレームを出すもの
+# ============================================================ 出力
+def _save(s, name):
+    pygame.image.save(s, os.path.join(ASSETS_DIR, f"{name}.png"))
 
-for name, fn in SPRITES.items():
-    pygame.image.save(fn(0), os.path.join(ASSETS_DIR, f"{name}.png"))
-    if name in WALKERS:
-        pygame.image.save(fn(1), os.path.join(ASSETS_DIR, f"{name}_walk1.png"))
-        pygame.image.save(fn(2), os.path.join(ASSETS_DIR, f"{name}_walk2.png"))
 
-print("regenerated 64x64 character sprites (+walk frames) into", ASSETS_DIR)
+def generate():
+    POSE_SUFFIX = {"idle": "", "walk1": "_walk1", "walk2": "_walk2", "attack": "_attack"}
+    for name, P in PALETTES.items():
+        for d in DIRS:
+            for pose in POSES:
+                _save(draw_humanoid(P, d, pose), f"{name}_{d}{POSE_SUFFIX[pose]}")
+        _save(draw_humanoid(P, "down", "idle"), name)  # 後方互換＆アイコン用
+    # スライム（無方向・squashで弾む）
+    _save(make_slime(0), "slime")
+    _save(make_slime(1), "slime_walk1")
+    _save(make_slime(2), "slime_walk2")
+    # 死体
+    _save(make_corpse(), "corpse")
+    print("regenerated directional character sprites into", ASSETS_DIR)
+
+
+if __name__ == "__main__":
+    generate()

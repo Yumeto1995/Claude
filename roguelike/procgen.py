@@ -69,9 +69,9 @@ def _scale_monster(monster: Entity, floor: int) -> None:
         return
     fi = monster.fighter
     if fi is not None:
-        fi.base_power += f // 2
+        fi.base_power += (f + 1) // 2   # 深いほど与ダメが伸びる
         fi.base_defense += f // 4
-        fi.max_hp += f * 3
+        fi.max_hp += f * 2              # HPは控えめに伸ばす（殴り応えを残す）
         fi._hp = fi.max_hp
     if monster.level is not None:
         monster.level.xp_given += f * 5
@@ -174,13 +174,11 @@ def generate_dungeon(
 
         if len(rooms) == 0:
             # 最初の部屋＝セーフルーム。プレイヤーを配置し、敵は置かない。
-            # 中央に上り階段（前の階／村へ戻る）を置く。
             # 最初の部屋は接続上「行き止まり（葉）」なので、敵を締め出しても
-            # 階層は分断されない。
+            # 階層は分断されない。上り階段は通路掘りで消えないよう最後に置く。
             player.x, player.y = new_room.center
             dungeon.safe[new_room.inner] = True
-            dungeon.tiles[new_room.center] = tile_types.up_stairs
-            dungeon.upstairs_location = new_room.center
+            first_room_center = new_room.center
         else:
             # 直前の部屋と通路でつなぐ
             for x, y in tunnel_between(rooms[-1].center, new_room.center):
@@ -194,8 +192,13 @@ def generate_dungeon(
         # FOV 用に部屋の範囲を記録
         dungeon.rooms.append((new_room.x1, new_room.y1, new_room.x2, new_room.y2))
 
-    # 最後の部屋の中央に下り階段を置く（上り階段と重ならないよう保証）
-    if center_of_last_room == dungeon.upstairs_location and len(rooms) >= 2:
+    # 上り階段（前の階／村へ）を最初の部屋の中央に置く。
+    # 通路掘りで床に上書きされないよう、全ての掘削が終わったここで置く。
+    dungeon.tiles[first_room_center] = tile_types.up_stairs
+    dungeon.upstairs_location = first_room_center
+
+    # 下り階段を最後の部屋の中央に置く（上り階段と重ならないよう保証）
+    if center_of_last_room == first_room_center and len(rooms) >= 2:
         center_of_last_room = rooms[1].center
     dungeon.tiles[center_of_last_room] = tile_types.down_stairs
     dungeon.downstairs_location = center_of_last_room

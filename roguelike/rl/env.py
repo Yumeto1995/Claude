@@ -60,13 +60,18 @@ class _ArenaEngine:
 class ArenaEnv:
     """reset() → 状態番号、step(行動番号) → (状態, 報酬, 終了, info)。"""
 
-    # 報酬の設計（ここを変えると性格が変わる）
-    R_DEALT = 2.0     # 与ダメージ1点あたり
-    R_TAKEN = -1.0    # 被ダメージ1点あたり
-    R_KILL = 30.0     # プレイヤー撃破
-    R_DEATH = -15.0   # 自分が倒される
-    R_STEP = -0.02    # 1ターンごとの微小ペナルティ（だらだら防止）
-    R_SURVIVE = 5.0   # 最後まで生き残ったボーナス
+    # 報酬の設計（ここを変えると性格が変わる）。
+    # 旧設計は「生き残りボーナス＋大きな被弾ペナルティ」で“逃げ得”になり、
+    # 敵が近づかず攻撃もしなかった。攻めて削るほど得する形に作り直す：
+    #  - 与ダメ・撃破を高評価、被弾・死亡ペナルティは控えめ（攻めを促す）
+    #  - プレイヤーへ近づくと加点（接近報酬）／離れる・1ターン経過は減点
+    #  - 生存ボーナスは廃止（逃げ続けても得しない）
+    R_DEALT = 3.0      # 与ダメージ1点あたり
+    R_TAKEN = -0.4     # 被ダメージ1点あたり（小さめ＝攻めても割に合う）
+    R_KILL = 40.0      # プレイヤー撃破
+    R_DEATH = -6.0     # 自分が倒される（控えめ＝交戦を恐れすぎない）
+    R_STEP = -0.3      # 1ターンごとの減点（モタつき・棒立ちを嫌う）
+    R_APPROACH = 1.2   # プレイヤーへ1マス近づくごと（離れると同額の減点）
 
     def __init__(
         self,
@@ -123,11 +128,16 @@ class ArenaEnv:
         self.steps = 0
         return encode(agent, player)
 
+    @staticmethod
+    def _dist(a, b) -> int:
+        return max(abs(a.x - b.x), abs(a.y - b.y))  # チェビシェフ距離（8方向）
+
     def step(self, action: int) -> Tuple[int, float, bool, dict]:
         eng, agent, player = self.engine, self.agent, self.engine.player
         self.steps += 1
         agent_hp0 = agent.fighter.hp
         player_hp0 = player.fighter.hp
+        dist0 = self._dist(agent, player)
 
         # --- エージェントの行動（ぶつかれば攻撃、空きマスなら移動、(0,0)は待機）
         dx, dy = ACTIONS[action]
@@ -145,7 +155,9 @@ class ArenaEnv:
         # --- 報酬と終了判定
         dealt = player_hp0 - player.fighter.hp
         taken = agent_hp0 - agent.fighter.hp
-        reward = dealt * self.R_DEALT + taken * self.R_TAKEN + self.R_STEP
+        # 接近報酬：プレイヤーに近づくほど加点（離れると減点）
+        approach = (dist0 - self._dist(agent, player)) * self.R_APPROACH
+        reward = dealt * self.R_DEALT + taken * self.R_TAKEN + approach + self.R_STEP
         done = False
         if player.fighter.hp <= 0:
             reward += self.R_KILL
@@ -154,8 +166,7 @@ class ArenaEnv:
             reward += self.R_DEATH
             done = True
         elif self.steps >= self.max_steps:
-            reward += self.R_SURVIVE
-            done = True
+            done = True   # 時間切れ（生存ボーナスは無し）
         info = {"dealt": dealt, "taken": taken, "steps": self.steps}
         return encode(agent, player), reward, done, info
 

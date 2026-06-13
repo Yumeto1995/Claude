@@ -40,7 +40,7 @@ goblin = Entity(
     name="ゴブリン",
     blocks_movement=True,
     ai_cls=RLEnemy,
-    fighter=Fighter(hp=10, defense=0, power=3),
+    fighter=Fighter(hp=12, defense=0, power=5),
     level=Level(xp_given=35),
 )
 
@@ -50,7 +50,7 @@ slime = Entity(
     name="スライム",
     blocks_movement=True,
     ai_cls=HostileEnemy,
-    fighter=Fighter(hp=16, defense=1, power=4),
+    fighter=Fighter(hp=18, defense=1, power=6),
     level=Level(xp_given=50),
 )
 
@@ -83,7 +83,7 @@ dagger = Entity(
     name="短剣",
     blocks_movement=False,
     # 軽い：攻撃力控えめだがスタミナ消費が少なく手数で攻める
-    equippable=Equippable(EquipmentType.WEAPON, power_bonus=2, stamina_cost=18),
+    equippable=Equippable(EquipmentType.WEAPON, power_bonus=3, stamina_cost=14),
 )
 
 sword = Entity(
@@ -91,7 +91,7 @@ sword = Entity(
     name="剣",
     blocks_movement=False,
     # 重い：高火力だがスタミナ消費が大きく、連続では振れない
-    equippable=Equippable(EquipmentType.WEAPON, power_bonus=4, stamina_cost=42),
+    equippable=Equippable(EquipmentType.WEAPON, power_bonus=6, stamina_cost=36),
 )
 
 # 防具：stamina_cost は攻撃時の追加消費（重い防具ほど攻撃が重くなる）。
@@ -106,7 +106,7 @@ chain_mail = Entity(
     sprite="chain_mail",
     name="鎖帷子",
     blocks_movement=False,
-    equippable=Equippable(EquipmentType.ARMOR, defense_bonus=3, stamina_cost=8),
+    equippable=Equippable(EquipmentType.ARMOR, defense_bonus=4, stamina_cost=6),
 )
 
 # --- 素材アイテム（効果なし。将来の合成用などに持っておく）---

@@ -99,14 +99,17 @@ class HostileEnemy(BaseAI):
 
 
 class RLEnemy(HostileEnemy):
-    """学習済みの方策（Qテーブル）で動く敵。★強化学習の本番側。
+    """A*で接近し、隣接したら学習済み方策（Qテーブル）で駆け引きする敵。★強化学習の本番側。
 
     rl/policy.npz（`python3 -m rl.train` で生成）をクラスで1回だけ読み込み、
     全個体で共有する。クラス属性なのでセーブデータ（pickle）には含まれない。
 
-    フォールバック（HostileEnemy と同じ動き）になる場合：
-    - 方策ファイルが無い・壊れている・観測設計が古い
-    - プレイヤーが観測の丸め幅（±4マス）より遠い → A* で追跡
+    設計（ハイブリッド）：
+    - 観測は相対位置・HP等のみで『壁』を認識しないため、接近の経路探索は
+      A*（HostileEnemy）に任せる＝ダンジョンの壁/通路でも確実に近づける。
+    - 隣接した間合いでは方策で「攻撃／後退／待機」を決める＝HPやプレイヤーの
+      スタミナを見て、削れるときに殴り不利なら引く、という駆け引きが出る。
+    - 方策が無い／壊れている場合は純粋な A* 追跡（HostileEnemy）にフォールバック。
     """
 
     _qtable = None       # 全個体で共有するQテーブル（numpy配列）
@@ -128,43 +131,45 @@ class RLEnemy(HostileEnemy):
         if not engine.game_map.visible[self.entity.x, self.entity.y]:
             return
 
+        q = self._policy()
+        if q is None:
+            return super().perform(engine)  # 方策なし → A*追跡
+
         target = engine.player
         dx = target.x - self.entity.x
         dy = target.y - self.entity.y
+        adjacent = max(abs(dx), abs(dy)) == 1
 
-        q = self._policy()
-        if q is None or max(abs(dx), abs(dy)) > rl_obs.CLAMP:
-            # 方策なし／遠距離は従来のルールベース（A*追跡）
+        # 隣接していない：A*で確実に接近（壁を回り込む）。同士討ちの気まぐれも従来通り。
+        if not adjacent:
             return super().perform(engine)
 
-        # 同士討ちの気まぐれは従来通り残す（プレイヤー非隣接時のみ）
-        if max(abs(dx), abs(dy)) > 1:
-            foe = self._adjacent_enemy(engine)
-            if foe is not None and random.random() < INFIGHT_CHANCE:
-                MeleeAction(
-                    foe.x - self.entity.x, foe.y - self.entity.y
-                ).perform(engine, self.entity)
-                return
-
-        # Q値の高い行動から順に、実行できるものを選ぶ
-        # （壁・他の敵・セーフルームで動けない行動はスキップ）
+        # 隣接：方策で「攻撃／後退／待機」を決める（間合いの駆け引き）
         state = rl_obs.encode(self.entity, target)
         for action in np.argsort(q[state])[::-1]:
             adx, ady = rl_obs.ACTIONS[action]
             if (adx, ady) == (0, 0):
-                return  # 待機が最善 → 何もしない
+                return  # 待機が最善（回復待ち等）
+            # プレイヤー方向なら攻撃
+            if (adx, ady) == (self._sign(dx), self._sign(dy)):
+                MeleeAction(adx, ady).perform(engine, self.entity)
+                return
+            # それ以外は後退/回り込み。動ける方向なら移動
             blocking = engine.game_map.get_blocking_entity_at(
                 self.entity.x + adx, self.entity.y + ady
             )
-            if blocking is target:
-                MeleeAction(adx, ady).perform(engine, self.entity)
-                return
             if blocking is not None:
-                continue  # 他の敵がいるマス
+                continue
             move = MovementAction(adx, ady)
             move.perform(engine, self.entity)
             if move.consumes_turn:
-                return  # 実際に動けたら終わり
+                return
+        # どれも不可なら攻撃にフォールバック（隣接しているので殴る）
+        MeleeAction(self._sign(dx), self._sign(dy)).perform(engine, self.entity)
+
+    @staticmethod
+    def _sign(v: int) -> int:
+        return (v > 0) - (v < 0)
         # どの行動もできなければ待機
 
 

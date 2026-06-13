@@ -105,8 +105,22 @@ class Engine:
         self.game_map = gm
         self.current_floor = floor
         loc = gm.upstairs_location if arrive == "up" else gm.downstairs_location
-        self.player.x, self.player.y = loc
+        # 階段の上ではなく『隣』に出す（来た階段の画像が見えるように）
+        self.player.x, self.player.y = self._adjacent_floor(gm, loc)
         self.update_fov()
+
+    @staticmethod
+    def _adjacent_floor(gm, loc) -> tuple:
+        """loc の隣で、歩けて他に誰もいない床マスを返す（無ければ loc 自身）。"""
+        lx, ly = loc
+        for dx, dy in ((0, 1), (1, 0), (-1, 0), (0, -1),
+                       (1, 1), (-1, 1), (1, -1), (-1, -1)):
+            nx, ny = lx + dx, ly + dy
+            if (gm.in_bounds(nx, ny) and gm.tiles["walkable"][nx, ny]
+                    and gm.tiles["sprite"][nx, ny] in (0,)  # 床のみ（階段は避ける）
+                    and gm.get_blocking_entity_at(nx, ny) is None):
+                return nx, ny
+        return loc
 
     def handle_events(self, events: Iterable) -> None:
         for event in events:

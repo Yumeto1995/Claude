@@ -113,25 +113,58 @@ def make_wood_floor(rng):
 
 
 def make_stairs(rng, up: bool):
-    """階段タイル。上り＝暖色＋上向き、下り＝寒色＋下向きの矢印。"""
-    base = (96, 80, 62)
-    s = make_surface(base, 8, rng)
-    step = (150, 116, 70) if up else (70, 90, 120)
-    edge = (110, 84, 50) if up else (44, 60, 86)
-    # 階段の段々
-    for i, y in enumerate(range(12, 56, 8)):
-        wpad = i * 4 if up else (44 - i * 4) // 2
-        x0, x1 = 8 + (wpad if up else (40 - wpad)) // 1, 56
-        for yy in range(y, y + 7):
-            for xx in range(14 + (i * 3 if up else 0), 50 - (0 if up else i * 3)):
-                s.set_at((max(0, min(63, xx)), min(63, yy)), step)
-    # 矢印
-    arrow = (236, 210, 120) if up else (150, 220, 255)
-    for k in range(8):
-        yy = (18 + k) if up else (46 - k)
-        for xx in range(32 - k, 32 + k + 1):
-            s.set_at((xx, yy), arrow)
-    pygame.draw.rect(s, edge, (0, 0, S, S), 2)
+    """高精細な階段タイル（見下ろし・奥行きのある石段）。
+
+    上り＝暖色の石が上奥へ向かって明るく狭まり、暖色シェブロンが上を指す。
+    下り＝寒色の石が下奥へ暗く狭まり、寒色シェブロンが下を指す（穴に降りる感じ）。
+    """
+    if up:
+        stone = (120, 100, 72); light = (168, 144, 100); dark = (74, 60, 42)
+        far = (196, 172, 124)            # 奥（上）ほど明るい
+        arrow = (250, 226, 150)
+    else:
+        stone = (72, 84, 110); light = (110, 124, 156); dark = (34, 42, 64)
+        far = (20, 26, 44)               # 奥（下）ほど暗い（穴）
+        arrow = (150, 220, 255)
+    s = make_surface(stone, 6, rng)
+    pygame.draw.rect(s, dark, (0, 0, S, S))            # 枠の下地
+    n = 7
+    top, bot = 4, 60
+    sh = (bot - top) / n
+    for i in range(n):
+        # i=0 が手前、i=n-1 が奥。奥ほど横幅が狭まり（台形）色が far に寄る
+        depth = i / (n - 1)
+        if not up:
+            depth = depth           # 下り：下が奥
+        taper = int(2 + depth * 16)
+        y0 = int(top + i * sh)
+        y1 = int(top + (i + 1) * sh) - 1
+        # 奥行きで色を補間
+        col = tuple(int(stone[k] + (far[k] - stone[k]) * depth) for k in range(3))
+        edge = tuple(int(c * 0.6) for c in col)
+        # 段板（上面）と段差（前面の影）
+        rect = (taper, y0, S - taper - 1, y1 - 1)
+        for yy in range(y0, y1):
+            for xx in range(taper, S - taper):
+                s.set_at((xx, yy), col)
+        # 段板の手前側ハイライト・奥側の段差影
+        for xx in range(taper, S - taper):
+            s.set_at((xx, y0), tuple(min(255, c + 40) for c in col))
+            s.set_at((xx, max(y0, y1 - 1)), edge)
+        # 側面の石壁
+        for xx in (taper - 1, S - taper):
+            for yy in range(y0, y1):
+                if 0 <= xx < S:
+                    s.set_at((xx, yy), dark)
+    # 方向シェブロン（二段の矢印）。up=▲（先端が上）/ down=▼（先端が下）
+    for j in (0, 1):
+        tip = (28 + j * 9) if up else (44 - j * 9)
+        for k in range(7):
+            yy = (tip + k) if up else (tip - k)   # 先端から末広がり
+            for xx in range(32 - k, 32 + k + 1):
+                if 0 <= yy < S:
+                    s.set_at((xx, yy), arrow)
+    pygame.draw.rect(s, dark, (0, 0, S, S), 2)
     return s
 
 
