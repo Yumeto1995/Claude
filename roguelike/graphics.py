@@ -21,7 +21,7 @@ from components.equippable import EquipmentType
 if TYPE_CHECKING:
     from engine import Engine
 
-TILE_SIZE = 32  # 1タイルのピクセルサイズ
+TILE_SIZE = 64  # 1タイルのピクセルサイズ（高精細化のため拡大）
 
 
 class AttackAnim:
@@ -46,26 +46,9 @@ class AttackAnim:
         return (self.dx * amount, self.dy * amount)
 
 
-class MoveAnim:
-    """移動したエンティティが、前のタイルから滑り込み＋小さく跳ねる歩行モーション。"""
-
-    DURATION = 0.12  # 移動間隔(120ms)とほぼ同じ
-    HOP = 5          # 跳ねる高さ(px)
-
-    def __init__(self, entity, dx: int, dy: int):
-        self.entity = entity
-        self.dx = dx
-        self.dy = dy
-        self.start = time.time()
-
-    def offset(self):
-        t = (time.time() - self.start) / self.DURATION
-        if t >= 1.0:
-            return None
-        ease = 1.0 - t  # 旧タイルからの残り距離（1→0）
-        ox = -self.dx * TILE_SIZE * ease
-        oy = -self.dy * TILE_SIZE * ease - math.sin(t * math.pi) * self.HOP
-        return (ox, oy)
+# 歩行の滑り込みは MoveAnim ではなく Renderer の位置スムージング（render_pos）で
+# 行う。離散スライドだと移動発火のタイミングずれで各マスに微小な静止が生じ
+# カクついたため、毎フレーム目標へ寄せる方式に変更した。
 
 
 class _TimedFx:
@@ -159,18 +142,31 @@ PLACEHOLDER_COLORS: Dict[str, tuple] = {
 
 TERRAIN_KEYS = {"floor", "wall"}
 
-# 日本語フォントの探索候補（上から順に試す）
+# 日本語フォントの探索候補（上から順に試す）。
+# 同梱の PixelMplus（ドット絵調・M+ライセンス）を最優先。
+# PixelMplus10 は10の倍数、PixelMplus12 は12の倍数のサイズで使うとドットが揃う。
+# 漢字の可読性が高い 12px 設計を本文に使う（24px = きっちり2倍表示）。
 _FONT_CANDIDATES = [
-    os.path.join(ASSETS_DIR, "fonts", "game.ttf"),  # 同梱フォント（配布用）
+    os.path.join(ASSETS_DIR, "fonts", "game.ttf"),  # 任意の差し替え用（最優先）
+    os.path.join(ASSETS_DIR, "fonts", "PixelMplus12-Regular.ttf"),
+    os.path.join(ASSETS_DIR, "fonts", "PixelMplus10-Regular.ttf"),
     "/System/Library/Fonts/ヒラギノ角ゴシック W3.ttc",
     "/System/Library/Fonts/Hiragino Sans GB.ttc",
     "/System/Library/Fonts/Supplemental/AppleGothic.ttf",
 ]
 
 
-def load_font(size: int) -> pygame.font.Font:
-    """日本語が出せるフォントを読み込む。見つからなければ既定フォント。"""
-    for path in _FONT_CANDIDATES:
+def load_font(size: int, bold: bool = False) -> pygame.font.Font:
+    """日本語が出せるフォントを読み込む。見つからなければ既定フォント。
+
+    bold=True は太字のピクセルフォントを探す（サイズに応じて
+    12px系/10px系のうちドットが揃う方を選ぶ）。
+    """
+    candidates = list(_FONT_CANDIDATES)
+    if bold:
+        name = "PixelMplus12-Bold.ttf" if size % 12 == 0 else "PixelMplus10-Bold.ttf"
+        candidates.insert(0, os.path.join(ASSETS_DIR, "fonts", name))
+    for path in candidates:
         if os.path.exists(path):
             return pygame.font.Font(path, size)
     return pygame.font.SysFont(None, size)  # 最終手段（日本語不可）
@@ -190,34 +186,39 @@ def _make_placeholder(key: str) -> pygame.Surface:
     return surf
 
 
+# キャラの追加ポーズ。あれば自動で読み込み、描画側が状況に応じて差し替える。
+#   _attack = 攻撃モーション中 / _walk1,_walk2 = 移動中に交互表示（歩行）
+SPRITE_VARIANTS = ("_attack", "_walk1", "_walk2")
+
+
 def load_sprites() -> Dict[str, pygame.Surface]:
     """全スプライトを読み込む。PNG が無ければ仮タイルで代用。
 
-    `<キー>_attack.png` があれば攻撃ポーズとして追加で読み込む
-    （攻撃モーション中だけ自動で差し替わる。無ければ通常画像のまま）。
+    `<キー>.png` に加え、あれば `<キー>_attack/_walk1/_walk2.png` も読む。
+    32px 原寸の地形・アイテムは TILE_SIZE への整数倍拡大でくっきり表示される。
     """
     sprites: Dict[str, pygame.Surface] = {}
     for key in PLACEHOLDER_COLORS:
         path = os.path.join(ASSETS_DIR, f"{key}.png")
         if os.path.exists(path):
             img = pygame.image.load(path).convert_alpha()
-            img = pygame.transform.scale(img, (TILE_SIZE, TILE_SIZE))
-            sprites[key] = img
+            sprites[key] = pygame.transform.scale(img, (TILE_SIZE, TILE_SIZE))
         else:
             sprites[key] = _make_placeholder(key)
-        attack_path = os.path.join(ASSETS_DIR, f"{key}_attack.png")
-        if os.path.exists(attack_path):
-            img = pygame.image.load(attack_path).convert_alpha()
-            sprites[f"{key}_attack"] = pygame.transform.scale(img, (TILE_SIZE, TILE_SIZE))
+        for suf in SPRITE_VARIANTS:
+            vpath = os.path.join(ASSETS_DIR, f"{key}{suf}.png")
+            if os.path.exists(vpath):
+                img = pygame.image.load(vpath).convert_alpha()
+                sprites[f"{key}{suf}"] = pygame.transform.scale(img, (TILE_SIZE, TILE_SIZE))
     return sprites
 
 
 class Renderer:
     """ウィンドウを持ち、カメラ追従でマップ・エンティティ・下部UIを描く。"""
 
-    PANEL_HEIGHT = 178   # 下部パネル（HP/Lv＋ログ）の高さ
+    PANEL_HEIGHT = 192   # 下部パネル（HP/Lv＋ログ）の高さ
     LOG_LINES = 4        # ログの表示行数
-    LINE_HEIGHT = 26
+    LINE_HEIGHT = 28
 
     def __init__(self, view_w: int, view_h: int):
         self.view_w = view_w
@@ -235,49 +236,189 @@ class Renderer:
         self.dark_sprites = {
             key: self._darken(surf) for key, surf in self.sprites.items()
         }
-        self.font = load_font(22)        # HP・ログ用
-        self.big_font = load_font(48)    # ゲームオーバー用
-        self.anims = []                  # 再生中のモーション（攻撃・歩行）
+        self.font = load_font(24)              # 本文（PixelMplus12 ×2倍）
+        self.font_bold = load_font(24, bold=True)   # 見出し・ラベル
+        self.big_font = load_font(48, bold=True)    # タイトル・ゲームオーバー
+        self.anims = []                  # 再生中の攻撃モーション（踏み込み）
         self.fx = []                     # 再生中のエフェクト（斬撃・フラッシュ・数字）
         self.flash = {}                  # id(entity) → 被弾フラッシュの強度(0〜1)
         self.attacking = set()           # 攻撃モーション再生中のエンティティ id
+        self.attack_off = {}             # id(entity) → 攻撃踏み込みのオフセット(px)
+        # 位置スムージング：各エンティティの「描画ピクセル位置」を毎フレーム
+        # 目標タイルへ滑らかに寄せる。これでカメラもキャラもカクつかず流れる。
+        self.render_pos = {}             # id(entity) → [px, py]（ワールド座標・左上）
+        self.last_tile = {}              # id(entity) → (tx, ty) 直近のタイル（歩数判定）
+        self.step_t0 = {}                # id(entity) → そのマスに踏み出した時刻
+        self.walking = set()             # 目標へ移動中のエンティティ id（脚アニメ用）
+        self.walk_step = {}              # id(entity) → 歩数（walk1/walk2 の交互判定）
+        self.now = 0.0                   # 現在時刻（_update_animations で更新）
+        self._last_frame_t = None        # 前フレームの時刻（dt 計算用）
 
     CONTROLS = [
-        "移動：矢印 / WASD / vi(hjkl,yubn) / テンキー（斜めも・2方向同時押し可）",
+        "移動：矢印 / WASD / vi / テンキー（斜め・2方向同時可）",
         "Z：足踏み　Space：移動/攻撃モード切替",
-        "G：足元のアイテムを拾う　i：持ち物（←→で分類、a〜で使用/装備）",
+        "G：拾う　i：持ち物（←→分類 ↑↓選択 Enter使用）",
         "Enter / >：下り階段で次の階へ",
-        "セーフルームで『魔法のテント』を使う→拠点（料理・畑・牧場・漁業・収納）",
-        "F5：セーブ　F9：ロード　F11：全画面切替",
+        "セーフルームで『魔法のテント』→拠点（料理・畑・牧場）",
+        "F5：セーブ　F9：ロード　F11：全画面",
         "ESC：タイトルへ戻る（自動セーブ）",
     ]
 
+    # ===== UI 共通部品（ウィンドウ枠・文字影・ゲージ） =====
+
+    FRAME_LIGHT = (211, 198, 156)  # 窓枠の明色（真鍮風）
+    FRAME_DARK = (110, 96, 66)     # 窓枠の暗色
+    WINDOW_BG = (15, 17, 28)       # ウィンドウの地色
+    TEXT_MAIN = (228, 228, 235)    # 本文
+    TEXT_DIM = (148, 150, 168)     # 補足・ヒント
+    TEXT_GOLD = (252, 226, 120)    # 強調・選択中
+
+    def _draw_window(self, x: int, y: int, w: int, h: int, alpha: int = 240) -> None:
+        """市販RPG風の装飾枠ウィンドウ（黒縁→明枠→暗ライン＋四隅飾り）。"""
+        box = pygame.Surface((w, h), pygame.SRCALPHA)
+        box.fill((*self.WINDOW_BG, alpha))
+        # 地のグラデーション（上1/3 をわずかに明るく）
+        pygame.draw.rect(box, (24, 27, 42, alpha), (3, 3, w - 6, max(8, h // 3)))
+        # 三重の枠
+        pygame.draw.rect(box, (0, 0, 0, 255), (0, 0, w, h), 1)
+        pygame.draw.rect(box, (*self.FRAME_LIGHT, 255), (1, 1, w - 2, h - 2), 2)
+        pygame.draw.rect(box, (*self.FRAME_DARK, 255), (3, 3, w - 6, h - 6), 1)
+        # 四隅の飾り鋲
+        for cx in (3, w - 7):
+            for cy in (3, h - 7):
+                pygame.draw.rect(box, (*self.FRAME_LIGHT, 255), (cx, cy, 4, 4))
+                pygame.draw.rect(box, (0, 0, 0, 255), (cx, cy, 4, 4), 1)
+        self.screen.blit(box, (x, y))
+
+    def _text(self, text: str, x: int, y: int, color=None, bold: bool = False,
+              shadow: bool = True) -> int:
+        """影付きでテキストを描き、描いた幅を返す（ドット絵らしい固い影）。"""
+        font = self.font_bold if bold else self.font
+        if color is None:
+            color = self.TEXT_MAIN
+        if shadow:
+            self.screen.blit(font.render(text, True, (6, 6, 10)), (x + 2, y + 2))
+        surf = font.render(text, True, color)
+        self.screen.blit(surf, (x, y))
+        return surf.get_width()
+
+    def _draw_gauge(self, x: int, y: int, w: int, h: int, ratio: float,
+                    color: tuple) -> None:
+        """枠付きゲージ。上下に明暗を入れて立体感を出す。"""
+        ratio = max(0.0, min(1.0, ratio))
+        pygame.draw.rect(self.screen, (0, 0, 0), (x, y, w, h))
+        pygame.draw.rect(self.screen, (46, 48, 60), (x + 1, y + 1, w - 2, h - 2))
+        fill = int((w - 4) * ratio)
+        if fill > 0:
+            light = tuple(min(255, c + 70) for c in color)
+            dark = tuple(max(0, c - 70) for c in color)
+            pygame.draw.rect(self.screen, color, (x + 2, y + 2, fill, h - 4))
+            pygame.draw.rect(self.screen, light, (x + 2, y + 2, fill, 2))
+            pygame.draw.rect(self.screen, dark, (x + 2, y + h - 4, fill, 2))
+
+    def _draw_chip(self, text: str, x: int, y: int, color, right_align: bool = False) -> int:
+        """小さな縁取りチップ（モード表示・階数表示など）。幅を返す。"""
+        surf = self.font.render(text, True, color)
+        w, h = surf.get_width() + 14, surf.get_height() + 6
+        if right_align:
+            x -= w
+        chip = pygame.Surface((w, h), pygame.SRCALPHA)
+        chip.fill((10, 11, 18, 215))
+        pygame.draw.rect(chip, (0, 0, 0, 255), (0, 0, w, h), 1)
+        dim = tuple(max(0, c - 110) for c in color)
+        pygame.draw.rect(chip, (*dim, 255), (1, 1, w - 2, h - 2), 1)
+        self.screen.blit(chip, (x, y))
+        self.screen.blit(surf, (x + 7, y + 3))
+        return w
+
     def render_title(self, options, cursor: int) -> None:
-        """タイトル画面（メニュー＋操作説明）。"""
+        """タイトル画面（ロゴ＋メニューウィンドウ＋操作説明）。"""
         screen = self.screen
         w = self.view_w * TILE_SIZE
-        screen.fill((10, 12, 18))
+        h = self.play_h + self.PANEL_HEIGHT
 
-        title = self.big_font.render("ローグライク", True, (255, 230, 120))
-        screen.blit(title, title.get_rect(center=(w // 2, 80)))
-        sub = self.font.render("〜 ダンジョンと拠点づくり 〜", True, (170, 175, 195))
-        screen.blit(sub, sub.get_rect(center=(w // 2, 126)))
+        # 夜空風の縦グラデーション背景
+        band = 4
+        for i in range(h // band + 1):
+            t = i / (h // band)
+            color = (int(7 + 9 * t), int(8 + 12 * t), int(14 + 22 * t))
+            pygame.draw.rect(screen, color, (0, i * band, w, band))
 
-        my = 190
+        # タイトルロゴ（固い影＋金色＋飾り罫）
+        title = "ローグライク"
+        tw = self.big_font.size(title)[0]
+        tx, ty = (w - tw) // 2, 56
+        screen.blit(self.big_font.render(title, True, (6, 6, 10)), (tx + 4, ty + 4))
+        screen.blit(self.big_font.render(title, True, self.TEXT_GOLD), (tx, ty))
+        line_y = ty + 60
+        pygame.draw.line(screen, self.FRAME_LIGHT,
+                         (w // 2 - 190, line_y), (w // 2 + 190, line_y), 2)
+        for dx in (-190, 190):  # 罫の両端の飾り
+            pygame.draw.rect(screen, self.FRAME_LIGHT, (w // 2 + dx - 3, line_y - 3, 6, 6))
+        sub = "- ダンジョンと拠点づくり -"
+        self._text(sub, (w - self.font.size(sub)[0]) // 2, line_y + 12,
+                   color=self.TEXT_DIM, shadow=False)
+
+        # メニューウィンドウ
+        mw = 340
+        mh = 26 + len(options) * 40 + 12
+        mx, my = (w - mw) // 2, 176
+        self._draw_window(mx, my, mw, mh)
         for i, opt in enumerate(options):
-            selected = i == cursor
-            color = (255, 230, 120) if selected else (210, 210, 220)
-            text = ("▶ " if selected else "   ") + opt
-            surf = self.font.render(text, True, color)
-            screen.blit(surf, surf.get_rect(center=(w // 2, my + i * 38)))
+            oy = my + 20 + i * 40
+            if i == cursor:
+                pygame.draw.rect(screen, (46, 52, 86), (mx + 8, oy - 5, mw - 16, 34))
+                pygame.draw.rect(screen, (104, 112, 168), (mx + 8, oy - 5, mw - 16, 34), 1)
+                pygame.draw.rect(screen, self.TEXT_GOLD, (mx + 8, oy - 5, 3, 34))
+                self._text("▶", mx + 22, oy, color=self.TEXT_GOLD, bold=True)
+            color = self.TEXT_GOLD if i == cursor else self.TEXT_MAIN
+            self._text(opt, mx + 56, oy, color=color, bold=(i == cursor))
 
-        cy = my + len(options) * 38 + 40
-        screen.blit(self.font.render("── 操作説明 ──", True, (150, 150, 175)), (40, cy))
-        for line in self.CONTROLS:
-            cy += 28
-            screen.blit(self.font.render(line, True, (190, 192, 205)), (40, cy))
+        # 操作説明ウィンドウ
+        cw = 680
+        ch = 40 + len(self.CONTROLS) * 28 + 10
+        cx, cy = (w - cw) // 2, my + mh + 16
+        self._draw_window(cx, cy, cw, ch, alpha=215)
+        self._text("操作説明", cx + 16, cy + 8, color=self.FRAME_LIGHT, bold=True)
+        pygame.draw.line(screen, self.FRAME_DARK,
+                         (cx + 12, cy + 36), (cx + cw - 12, cy + 36), 1)
+        for i, line in enumerate(self.CONTROLS):
+            self._text(line, cx + 16, cy + 44 + i * 28, color=self.TEXT_DIM, shadow=False)
 
         pygame.display.flip()
+
+    def _camera_px(self, engine: "Engine") -> tuple:
+        """プレイヤーのスムージング済み位置にピクセル単位で追従するカメラ。
+
+        返り値はビュー左上のワールドピクセル座標 (cam_x, cam_y)。
+        タイル整数ではなくピクセルで動かすので、世界がカクつかず滑らかにスクロールする。
+        攻撃の踏み込みはカメラに含めない（画面が揺れないように）。マップ端でクランプ。
+        """
+        p = engine.player
+        px, py = self.render_pos.get(id(p), (p.x * TILE_SIZE, p.y * TILE_SIZE))
+        gm = engine.game_map
+        vw, vh = self.view_w * TILE_SIZE, self.view_h * TILE_SIZE
+        cam_x = px + TILE_SIZE / 2 - vw / 2
+        cam_y = py + TILE_SIZE / 2 - vh / 2
+        cam_x = max(0.0, min(cam_x, gm.width * TILE_SIZE - vw))
+        cam_y = max(0.0, min(cam_y, gm.height * TILE_SIZE - vh))
+        return cam_x, cam_y
+
+    def _draw_terrain(self, gm, cam_x: float, cam_y: float, surf_of) -> None:
+        """ピクセルカメラに合わせて地形タイルを敷き詰める。
+
+        surf_of(tx, ty) が描くべき Surface（None ならスキップ）を返す。
+        端の欠けを防ぐためビューより1タイル広く回す。
+        """
+        screen = self.screen
+        tx0, ty0 = int(cam_x // TILE_SIZE), int(cam_y // TILE_SIZE)
+        for ty in range(ty0, ty0 + self.view_h + 2):
+            for tx in range(tx0, tx0 + self.view_w + 2):
+                if not gm.in_bounds(tx, ty):
+                    continue
+                surf = surf_of(tx, ty)
+                if surf is not None:
+                    screen.blit(surf, (tx * TILE_SIZE - cam_x, ty * TILE_SIZE - cam_y))
 
     def render(self, engine: "Engine") -> None:
         screen = self.screen
@@ -303,65 +444,53 @@ class Renderer:
 
         gm = engine.game_map
 
-        # カメラ：プレイヤー中心。マップ端ではみ出さないようクランプ
-        cam_x = max(0, min(engine.player.x - self.view_w // 2, gm.width - self.view_w))
-        cam_y = max(0, min(engine.player.y - self.view_h // 2, gm.height - self.view_h))
+        # 位置スムージングを更新し、ピクセル単位カメラでプレイヤーに滑らかに追従
+        self._update_animations(engine)
+        cam_x, cam_y = self._camera_px(engine)
 
         # 地形を描画（見えている=明るく / 探索済み=暗く / 未探索=黒）
-        for sy in range(self.view_h):
-            for sx in range(self.view_w):
-                wx, wy = cam_x + sx, cam_y + sy
-                if not gm.in_bounds(wx, wy):
-                    continue
-                sprite_id = gm.tiles["sprite"][wx, wy]
-                if sprite_id == tile_types.SPRITE_WALL:
-                    key = "wall"
-                elif sprite_id == tile_types.SPRITE_DOWNSTAIRS:
-                    key = "stairs_down"
-                elif gm.safe[wx, wy]:
-                    key = "safe_floor"
-                else:
-                    key = "floor"
-                pos = (sx * TILE_SIZE, sy * TILE_SIZE)
-                if gm.visible[wx, wy]:
-                    screen.blit(self.sprites[key], pos)
-                elif gm.explored[wx, wy]:
-                    screen.blit(self.dark_sprites[key], pos)
-                # 未探索は描かない（黒のまま）
-
-        # 攻撃モーションのオフセットを更新（id(entity) → (ox, oy)）
-        offsets = self._update_animations(engine)
+        def terrain(tx, ty):
+            sid = gm.tiles["sprite"][tx, ty]
+            if sid == tile_types.SPRITE_WALL:
+                key = "wall"
+            elif sid == tile_types.SPRITE_DOWNSTAIRS:
+                key = "stairs_down"
+            elif gm.safe[tx, ty]:
+                key = "safe_floor"
+            else:
+                key = "floor"
+            if gm.visible[tx, ty]:
+                return self.sprites[key]
+            if gm.explored[tx, ty]:
+                return self.dark_sprites[key]
+            return None  # 未探索は描かない
+        self._draw_terrain(gm, cam_x, cam_y, terrain)
 
         # エンティティを描画（死体→生者の順）。見えているタイルのものだけ。
+        vw, vh = self.view_w * TILE_SIZE, self.view_h * TILE_SIZE
         for entity in sorted(gm.entities, key=lambda e: e.blocks_movement):
             if not gm.visible[entity.x, entity.y]:
                 continue
-            ex, ey = entity.x - cam_x, entity.y - cam_y
-            if 0 <= ex < self.view_w and 0 <= ey < self.view_h:
-                key = entity.sprite
-                # 攻撃モーション中、攻撃ポーズ画像があれば差し替える
-                if id(entity) in self.attacking and f"{key}_attack" in self.sprites:
-                    key = f"{key}_attack"
-                sprite = self.sprites.get(key, self.sprites["player"])
+            sx, sy = self._entity_screen(entity, cam_x, cam_y)
+            if -TILE_SIZE < sx < vw and -TILE_SIZE < sy < vh:
+                # 攻撃ポーズ・歩行コマ・通常を状況で切り替える
+                sprite = self.sprites.get(
+                    self._sprite_key_for(entity), self.sprites["player"]
+                )
                 flash = self.flash.get(id(entity), 0.0)
                 if flash > 0.0:
                     sprite = self._whiten(sprite, flash)  # 被弾フラッシュ
-                ox, oy = offsets.get(id(entity), (0, 0))
-                screen.blit(sprite, (ex * TILE_SIZE + ox, ey * TILE_SIZE + oy))
+                if entity.blocks_movement:  # 生きたキャラには足元影
+                    self._draw_shadow(sx, sy)
+                screen.blit(sprite, (sx, sy))
 
         # 斬撃・ダメージ数字はエンティティの上に重ねる
         self._draw_fx(engine, cam_x, cam_y)
 
         # セーフルームにいるときは画面右上に表示
         if engine.game_map.safe[engine.player.x, engine.player.y]:
-            label = self.font.render("セーフルーム", True, colors.HEAL)
-            lw = self.view_w * TILE_SIZE
-            rect = label.get_rect(topright=(lw - 8, 6))
-            bg = pygame.Surface((label.get_width() + 10, label.get_height() + 4))
-            bg.set_alpha(150)
-            bg.fill((0, 0, 0))
-            screen.blit(bg, (rect.x - 5, rect.y - 2))
-            screen.blit(label, rect)
+            self._draw_chip("セーフルーム", self.view_w * TILE_SIZE - 8, 8,
+                            colors.HEAL, right_align=True)
 
         self._render_panel(engine)
 
@@ -379,36 +508,31 @@ class Renderer:
 
         screen = self.screen
         gm = engine.game_map
-        cam_x = max(0, min(engine.player.x - self.view_w // 2, gm.width - self.view_w))
-        cam_y = max(0, min(engine.player.y - self.view_h // 2, gm.height - self.view_h))
+        self._update_animations(engine)
+        cam_x, cam_y = self._camera_px(engine)
 
-        for sy in range(self.view_h):
-            for sx in range(self.view_w):
-                wx, wy = cam_x + sx, cam_y + sy
-                if not gm.in_bounds(wx, wy):
-                    continue
-                sid = gm.tiles["sprite"][wx, wy]
-                if sid == tile_types.SPRITE_WALL:
-                    key = "wall"
-                elif sid == tile_types.SPRITE_DOWNSTAIRS:
-                    key = "stairs_down"
-                else:
-                    key = "floor"
-                screen.blit(self.sprites[key], (sx * TILE_SIZE, sy * TILE_SIZE))
+        def terrain(tx, ty):
+            sid = gm.tiles["sprite"][tx, ty]
+            if sid == tile_types.SPRITE_WALL:
+                return self.sprites["wall"]
+            if sid == tile_types.SPRITE_DOWNSTAIRS:
+                return self.sprites["stairs_down"]
+            return self.sprites["floor"]
+        self._draw_terrain(gm, cam_x, cam_y, terrain)
 
         # 看板（区画名）
         for text, lx, ly in village_map.LABELS:
-            screen.blit(self.font.render(text, True, (210, 205, 150)),
-                        ((lx - cam_x) * TILE_SIZE, (ly - cam_y) * TILE_SIZE))
+            self._text(text, lx * TILE_SIZE - cam_x, ly * TILE_SIZE - cam_y,
+                       color=(214, 206, 156), bold=True)
 
-        # エンティティ（NPC→プレイヤーの順）。歩行アニメのオフセットを適用。
-        offsets = self._update_animations(engine)
+        # エンティティ（NPC→プレイヤーの順）。スムージング位置で描く。
+        vw, vh = self.view_w * TILE_SIZE, self.view_h * TILE_SIZE
         for ent in sorted(gm.entities, key=lambda e: e is engine.player):
-            ex, ey = ent.x - cam_x, ent.y - cam_y
-            if 0 <= ex < self.view_w and 0 <= ey < self.view_h:
-                spr = self.sprites.get(ent.sprite, self.sprites["player"])
-                ox, oy = offsets.get(id(ent), (0, 0))
-                screen.blit(spr, (ex * TILE_SIZE + ox, ey * TILE_SIZE + oy))
+            sx, sy = self._entity_screen(ent, cam_x, cam_y)
+            if -TILE_SIZE < sx < vw and -TILE_SIZE < sy < vh:
+                spr = self.sprites.get(self._sprite_key_for(ent), self.sprites["player"])
+                self._draw_shadow(sx, sy)
+                screen.blit(spr, (sx, sy))
 
         # 足元/隣の案内
         px, py = engine.player.x, engine.player.y
@@ -421,28 +545,27 @@ class Renderer:
                     hint = f"Enter で {ent.name} と話す"
                     break
         if hint:
-            screen.blit(self.font.render(hint, True, colors.DESCEND), (8, self.play_h - 28))
+            self._draw_chip(hint, 8, self.play_h - 36, colors.DESCEND)
 
     def _render_dialogue(self, engine: "Engine") -> None:
+        """会話ウィンドウ（名前プレートが枠に重なる市販RPG風）。"""
         d = engine.dialogue
-        screen = self.screen
         w = self.view_w * TILE_SIZE
         bx, bw = 20, w - 40
-        bh = 44 + len(d["lines"]) * 28 + 20
-        by = self.play_h - bh - 16
+        bh = 30 + len(d["lines"]) * 28 + 42
+        by = self.play_h - bh - 14
 
-        box = pygame.Surface((bw, bh))
-        box.set_alpha(238)
-        box.fill((15, 16, 28))
-        screen.blit(box, (bx, by))
-        pygame.draw.rect(screen, (120, 120, 150), (bx, by, bw, bh), 2)
+        self._draw_window(bx, by, bw, bh)
+        # 名前プレート（本体の枠に少し重ねる）
+        plate_w = self.font_bold.size(d["name"])[0] + 30
+        self._draw_window(bx + 14, by - 19, plate_w, 36, alpha=255)
+        self._text(d["name"], bx + 29, by - 13, color=self.TEXT_GOLD, bold=True)
 
-        screen.blit(self.font.render(f"【{d['name']}】", True, (255, 230, 120)), (bx + 14, by + 10))
         for i, line in enumerate(d["lines"]):
-            screen.blit(self.font.render(line, True, (225, 225, 235)),
-                        (bx + 18, by + 44 + i * 28))
-        tip = self.font.render("Enter で閉じる", True, (150, 150, 165))
-        screen.blit(tip, (bx + bw - tip.get_width() - 12, by + bh - 26))
+            self._text(line, bx + 22, by + 26 + i * 28)
+        tip = "Enter で閉じる"
+        self._text(tip, bx + bw - self.font.size(tip)[0] - 16, by + bh - 30,
+                   color=self.TEXT_DIM, shadow=False)
 
     def _render_camp_map(self, engine: "Engine") -> None:
         """歩けるテント内マップ（地形・設備・区画名・プレイヤー・案内）。"""
@@ -450,45 +573,37 @@ class Renderer:
 
         screen = self.screen
         gm = engine.game_map
-        cam_x = max(0, min(engine.player.x - self.view_w // 2, gm.width - self.view_w))
-        cam_y = max(0, min(engine.player.y - self.view_h // 2, gm.height - self.view_h))
+        self._update_animations(engine)
+        cam_x, cam_y = self._camera_px(engine)
 
-        for sy in range(self.view_h):
-            for sx in range(self.view_w):
-                wx, wy = cam_x + sx, cam_y + sy
-                if not gm.in_bounds(wx, wy):
-                    continue
-                key = "wall" if gm.tiles["sprite"][wx, wy] == tile_types.SPRITE_WALL else "floor"
-                screen.blit(self.sprites[key], (sx * TILE_SIZE, sy * TILE_SIZE))
+        def terrain(tx, ty):
+            key = "wall" if gm.tiles["sprite"][tx, ty] == tile_types.SPRITE_WALL else "floor"
+            return self.sprites[key]
+        self._draw_terrain(gm, cam_x, cam_y, terrain)
 
         # 設備
         for (wx, wy), kind in camp_map.STATIONS.items():
             spr = self._station_sprite(kind, engine)
-            screen.blit(self.sprites[spr], ((wx - cam_x) * TILE_SIZE, (wy - cam_y) * TILE_SIZE))
+            screen.blit(self.sprites[spr], (wx * TILE_SIZE - cam_x, wy * TILE_SIZE - cam_y))
 
         # 区画名ラベル
         for text, lx, ly in camp_map.ZONE_LABELS:
-            screen.blit(
-                self.font.render(text, True, (200, 200, 140)),
-                ((lx - cam_x) * TILE_SIZE, (ly - cam_y) * TILE_SIZE),
-            )
+            self._text(text, lx * TILE_SIZE - cam_x, ly * TILE_SIZE - cam_y,
+                       color=(206, 204, 146), bold=True)
 
-        # プレイヤー（歩行アニメのオフセットを適用）
-        offsets = self._update_animations(engine)
-        pox, poy = offsets.get(id(engine.player), (0, 0))
+        # プレイヤー（スムージング位置で描く）
+        ppx, ppy = self._entity_screen(engine.player, cam_x, cam_y)
+        self._draw_shadow(ppx, ppy)
         screen.blit(
-            self.sprites["player"],
-            ((engine.player.x - cam_x) * TILE_SIZE + pox,
-             (engine.player.y - cam_y) * TILE_SIZE + poy),
+            self.sprites.get(self._sprite_key_for(engine.player), self.sprites["player"]),
+            (ppx, ppy),
         )
 
-        # 足元の設備案内
+        # 足元の設備案内（設備メニューを開いている間は出さない）
         here = camp_map.STATIONS.get((engine.player.x, engine.player.y))
-        if here is not None:
+        if here is not None and engine.camp_menu is None:
             label = camp_map.STATION_LABELS.get(here, here)
-            txt = "Enter で " + label
-            surf = self.font.render(txt, True, colors.DESCEND)
-            screen.blit(surf, (8, self.play_h - 28))
+            self._draw_chip("Enter で " + label, 8, self.play_h - 36, colors.DESCEND)
 
     @staticmethod
     def _station_sprite(kind: str, engine: "Engine") -> str:
@@ -500,108 +615,131 @@ class Renderer:
         return "st_" + kind
 
     def _render_camp_menu(self, engine: "Engine") -> None:
-        """設備メニューのオーバーレイ。camp モジュールの状態に従って描く。"""
+        """設備メニュー：全画面を暗くして大きな装飾ウィンドウに表示する。"""
         screen = self.screen
         w = self.view_w * TILE_SIZE
         h = self.play_h + self.PANEL_HEIGHT
 
         overlay = pygame.Surface((w, h))
-        overlay.set_alpha(232)
-        overlay.fill((12, 14, 20))
+        overlay.set_alpha(170)
+        overlay.fill((4, 5, 9))
         screen.blit(overlay, (0, 0))
 
-        x, y = 60, 40
-        screen.blit(self.big_font.render(camp.title(engine), True, (255, 230, 120)), (x, y))
+        wx, wy = 44, 26
+        ww, wh = w - 88, h - 52
+        self._draw_window(wx, wy, ww, wh)
 
-        cy = y + 64
+        x, y = wx + 22, wy + 14
+        self._text(camp.title(engine), x, y, color=self.TEXT_GOLD, bold=True)
+        pygame.draw.line(screen, self.FRAME_DARK,
+                         (wx + 14, y + 34), (wx + ww - 14, y + 34), 1)
+
+        cy = y + 46
         # 補足情報（畑の状態・発見済み料理など）
         for line in camp.info(engine):
-            screen.blit(self.font.render(line, True, (175, 180, 190)), (x, cy))
+            self._text(line, x, cy, color=self.TEXT_DIM, shadow=False)
             cy += self.LINE_HEIGHT
 
         cy += 8
-        # 選択肢
+        # 選択肢（選択中はハイライトバー）
         for i, opt in enumerate(camp.options(engine)):
             self._camp_line(
-                x, cy + i * self.LINE_HEIGHT,
+                wx, ww, x, cy + i * self.LINE_HEIGHT,
                 opt["text"], i == engine.camp_cursor, opt.get("enabled", True),
             )
 
-        screen.blit(
-            self.font.render("↑↓：選択   Enter：決定   ESC：戻る", True, (150, 150, 160)),
-            (x, h - 40),
-        )
+        self._text("↑↓：選択　Enter：決定　ESC：戻る",
+                   x, wy + wh - 36, color=self.TEXT_DIM, shadow=False)
 
-    def _camp_line(self, x: int, y: int, text: str, selected: bool, enabled: bool) -> None:
-        cursor = "▶ " if selected else "    "
+    def _camp_line(self, wx: int, ww: int, x: int, y: int,
+                   text: str, selected: bool, enabled: bool) -> None:
+        if selected:
+            pygame.draw.rect(self.screen, (46, 52, 86), (wx + 10, y - 3, ww - 20, self.LINE_HEIGHT))
+            pygame.draw.rect(self.screen, (104, 112, 168), (wx + 10, y - 3, ww - 20, self.LINE_HEIGHT), 1)
+            pygame.draw.rect(self.screen, self.TEXT_GOLD, (wx + 10, y - 3, 3, self.LINE_HEIGHT))
+            self._text("▶", x, y, color=self.TEXT_GOLD, bold=True)
         if not enabled:
-            color = (115, 115, 120)       # 材料不足などで作れない
+            color = (110, 110, 118)       # 材料不足などで作れない
         elif selected:
-            color = (255, 230, 120)
+            color = self.TEXT_GOLD
         else:
-            color = (220, 220, 230)
-        self.screen.blit(self.font.render(cursor + text, True, color), (x, y))
+            color = self.TEXT_MAIN
+        self._text(text, x + 30, y, color=color, shadow=selected)
+
+    ROW_H = 36  # 持ち物1行の高さ（32pxアイコン＋余白）
 
     def _render_inventory(self, engine: "Engine") -> None:
-        """持ち物メニューのオーバーレイ（分類タブ付き）。"""
+        """持ち物メニュー：装飾枠＋分類タブ＋アイコン付き一覧。"""
         screen = self.screen
         all_items = engine.player.inventory.items
         current = item_category.ORDER[engine.inventory_category]
         items = item_category.items_in(all_items, current)
 
-        x, y = 24, 24
-        width = 540
-        height = 92 + max(1, len(items)) * self.LINE_HEIGHT
+        x, y = 24, 20
+        width = 706
+        header_h = 86
+        height = header_h + max(1, len(items)) * self.ROW_H + 44
+        self._draw_window(x, y, width, height)
 
-        box = pygame.Surface((width, height))
-        box.set_alpha(235)
-        box.fill((15, 15, 25))
-        screen.blit(box, (x, y))
-        pygame.draw.rect(screen, (120, 120, 150), (x, y, width, height), 2)
+        # タイトル行：見出し＋所持数
+        self._text("持ち物", x + 18, y + 10, color=self.TEXT_GOLD, bold=True)
+        self._text(f"{len(all_items)} / {engine.player.inventory.capacity}",
+                   x + 122, y + 10, color=self.TEXT_DIM)
 
-        # 分類タブ（現在の分類を強調、各分類の所持数を併記）
-        tab_x = x + 14
+        # 分類タブ（選択中は明るい箱＋金文字）
+        tab_x = x + 12
+        tab_y = y + 48
         for cat in item_category.ORDER:
             count = len(item_category.items_in(all_items, cat))
-            label = f"{item_category.LABELS[cat]}({count})"
-            color = (255, 230, 120) if cat is current else (130, 130, 145)
-            surf = self.font.render(label, True, color)
-            screen.blit(surf, (tab_x, y + 10))
-            tab_x += surf.get_width() + 14
-
-        # 操作ヒント
-        hint = self.font.render(
-            "←→：分類切替   ↑↓：選択   Enter：使用/装備   i：閉じる", True, (150, 150, 160)
-        )
-        screen.blit(hint, (x + 14, y + 10 + self.LINE_HEIGHT))
-
-        # 現在の分類のアイテム一覧
-        list_y = y + 14 + self.LINE_HEIGHT * 2
-        if not items:
-            screen.blit(
-                self.font.render("（なし）", True, (160, 160, 160)), (x + 18, list_y)
-            )
-            return
-        equipment = engine.player.equipment
-        cursor = min(engine.inventory_cursor, len(items) - 1)
-        for i, item in enumerate(items):
-            row_y = list_y + i * self.LINE_HEIGHT
-            stat = self._equippable_stat_text(item)
-            mark = "  [装備中]" if equipment.item_is_equipped(item) else ""
-            if i == cursor:
-                # カーソル行：背景を明るくして ▶ を付ける
-                pygame.draw.rect(
-                    screen, (55, 55, 90),
-                    (x + 8, row_y - 2, width - 16, self.LINE_HEIGHT),
-                )
-                text_color = (255, 255, 200)
+            label = f"{item_category.LABELS[cat]} {count}"
+            tw = self.font.size(label)[0] + 18
+            active = cat is current
+            if active:
+                pygame.draw.rect(screen, (52, 58, 92), (tab_x, tab_y - 5, tw, 34))
+                pygame.draw.rect(screen, self.FRAME_LIGHT, (tab_x, tab_y - 5, tw, 34), 1)
             else:
-                text_color = (230, 230, 230)
-            prefix = "▶ " if i == cursor else "   "
-            line = self.font.render(
-                f"{prefix}{item.name}{stat}{mark}", True, text_color
-            )
-            screen.blit(line, (x + 18, row_y))
+                pygame.draw.rect(screen, (24, 26, 40), (tab_x, tab_y - 5, tw, 34))
+                pygame.draw.rect(screen, (58, 60, 78), (tab_x, tab_y - 5, tw, 34), 1)
+            self._text(label, tab_x + 9, tab_y,
+                       color=self.TEXT_GOLD if active else self.TEXT_DIM, shadow=active)
+            tab_x += tw + 6
+
+        # アイテム一覧（アイコン＋名前＋性能＋装備中バッジ）
+        list_y = y + header_h
+        if not items:
+            self._text("（なし）", x + 26, list_y + 6, color=self.TEXT_DIM)
+        else:
+            equipment = engine.player.equipment
+            cursor = min(engine.inventory_cursor, len(items) - 1)
+            for i, item in enumerate(items):
+                row_y = list_y + i * self.ROW_H
+                if i == cursor:
+                    pygame.draw.rect(screen, (46, 52, 86),
+                                     (x + 8, row_y, width - 16, self.ROW_H))
+                    pygame.draw.rect(screen, (104, 112, 168),
+                                     (x + 8, row_y, width - 16, self.ROW_H), 1)
+                    pygame.draw.rect(screen, self.TEXT_GOLD, (x + 8, row_y, 3, self.ROW_H))
+                icon = self.sprites.get(item.sprite)
+                if icon is not None:
+                    screen.blit(icon, (x + 20, row_y + (self.ROW_H - TILE_SIZE) // 2))
+                name_color = self.TEXT_GOLD if i == cursor else self.TEXT_MAIN
+                self._text(item.name, x + 62, row_y + 7, color=name_color)
+                # 右端：装備中バッジ → 性能（控えめ色）の順に右詰め
+                right = x + width - 16
+                if equipment.item_is_equipped(item):
+                    right -= self._draw_chip("装備中", right, row_y + 4,
+                                             self.TEXT_GOLD, right_align=True) + 10
+                stat = self._equippable_stat_text(item).strip()
+                if stat:
+                    sw = self.font.size(stat)[0]
+                    self._text(stat, right - sw, row_y + 7,
+                               color=self.TEXT_DIM, shadow=False)
+
+        # フッター：操作ヒント
+        fy = y + height - 32
+        pygame.draw.line(screen, self.FRAME_DARK, (x + 10, fy - 4), (x + width - 10, fy - 4), 1)
+        self._text("←→：分類　↑↓：選択　Enter：使用/装備　i：閉じる",
+                   x + 18, fy, color=self.TEXT_DIM, shadow=False)
 
     @staticmethod
     def _equippable_stat_text(item) -> str:
@@ -622,6 +760,33 @@ class Renderer:
                 parts.append(f"ST{eq.stamina_cost}")
         return "  (" + " ".join(parts) + ")" if parts else ""
 
+    # 1歩(1マス)の中の脚サイクル：踏み出し→足をそろえる(passing)。
+    # これを毎マス交互の足で繰り返すと「右足・左足」の歩行に見える。
+    STEP_DT = 0.13   # 1歩の見かけ時間(秒)。踏み出し時刻からの経過で位相を取る
+    PASS_AT = 0.6    # 位相がこの割合を超えたら passing（足をそろえる）に切替
+
+    def _sprite_key_for(self, entity) -> str:
+        """状況に応じたスプライトキーを返す（攻撃ポーズ＞歩行コマ＞通常）。"""
+        key = entity.sprite
+        eid = id(entity)
+        if eid in self.attacking and f"{key}_attack" in self.sprites:
+            return f"{key}_attack"
+        if eid in self.walking:
+            # 踏み出してからの経過で位相を取り、前半=踏み出し / 後半=足そろえ
+            phase = (self.now - self.step_t0.get(eid, self.now)) / self.STEP_DT
+            if phase < self.PASS_AT:
+                stride = "_walk1" if self.walk_step.get(eid, 0) % 2 == 0 else "_walk2"
+                if f"{key}{stride}" in self.sprites:
+                    return f"{key}{stride}"
+        return key
+
+    def _draw_shadow(self, px: float, py: float) -> None:
+        """キャラの足元に落ちる楕円影（接地感を出す）。"""
+        sh = pygame.Surface((TILE_SIZE, TILE_SIZE), pygame.SRCALPHA)
+        pygame.draw.ellipse(sh, (0, 0, 0, 78),
+                            (5, TILE_SIZE - 9, TILE_SIZE - 10, 7))
+        self.screen.blit(sh, (px, py))
+
     @staticmethod
     def _whiten(surf: pygame.Surface, intensity: float) -> pygame.Surface:
         """スプライトを白寄りに光らせたコピーを返す（被弾フラッシュ用）。"""
@@ -637,15 +802,28 @@ class Renderer:
         dark.fill((90, 90, 110), special_flags=pygame.BLEND_RGB_MULT)
         return dark
 
-    def _update_animations(self, engine: "Engine") -> Dict[int, tuple]:
-        """engine の予約（攻撃・歩行・エフェクト）を取り込み、オフセットを集計して返す。
+    # 位置スムージングの係数。
+    SMOOTH_TAU = 0.045   # 目標へ寄る時定数(秒)。小さいほど機敏、大きいほどぬるっと
+    SNAP_DIST = TILE_SIZE * 1.6  # これ以上離れていたら瞬間移動とみなしスナップ
 
-        被弾フラッシュの強度は self.flash に集計する（エンティティ描画時に参照）。
+    def _update_animations(self, engine: "Engine") -> None:
+        """毎フレーム呼ぶ。描画位置を目標へ滑らかに寄せ、攻撃/エフェクトも更新する。
+
+        従来の「1マス＝1スライド」方式は移動発火のタイミングずれで各マスに
+        微小な静止フレームが生じカクついた。ここでは離散スライドをやめ、
+        render_pos を毎フレーム指数関数的に目標へ近づける（=途切れない動き）。
         """
+        now = time.time()
+        self.now = now
+        dt = 0.0 if self._last_frame_t is None else now - self._last_frame_t
+        self._last_frame_t = now
+        dt = min(0.1, max(0.0, dt))
+        alpha = 1.0 - math.exp(-dt / self.SMOOTH_TAU) if dt > 0 else 0.0
+
+        # 攻撃モーション・エフェクトの取り込み（移動予約は位置追従で扱うので捨てる）
         for entity, dx, dy in engine.drain_animations():
             self.anims.append(AttackAnim(entity, dx, dy))
-        for entity, dx, dy in engine.drain_moves():
-            self.anims.append(MoveAnim(entity, dx, dy))
+        engine.drain_moves()
         for fx in engine.drain_fx():
             kind = fx[0]
             if kind == "slash":
@@ -655,18 +833,51 @@ class Renderer:
             elif kind == "popup":
                 self.fx.append(PopupAnim(*fx[1:]))
 
-        offsets: Dict[int, tuple] = {}
+        # --- 位置スムージング：各エンティティの描画位置を目標タイルへ寄せる ---
+        ents = list(engine.game_map.entities)
+        if engine.player not in ents:
+            ents.append(engine.player)
+        self.walking = set()
+        live = set()
+        for ent in ents:
+            eid = id(ent)
+            live.add(eid)
+            tx, ty = ent.x * TILE_SIZE, ent.y * TILE_SIZE
+            cur = self.render_pos.get(eid)
+            if (cur is None or abs(cur[0] - tx) > self.SNAP_DIST
+                    or abs(cur[1] - ty) > self.SNAP_DIST):
+                self.render_pos[eid] = [float(tx), float(ty)]   # 初期/瞬間移動はスナップ
+            else:
+                cur[0] += (tx - cur[0]) * alpha
+                cur[1] += (ty - cur[1]) * alpha
+                if abs(cur[0] - tx) > 1.0 or abs(cur[1] - ty) > 1.0:
+                    self.walking.add(eid)
+                else:                                           # 十分近ければ吸着
+                    cur[0], cur[1] = float(tx), float(ty)
+            # タイルが変わった瞬間に歩数++＆踏み出し時刻を記録（左右の足を交互に）
+            if self.last_tile.get(eid) != (ent.x, ent.y):
+                if eid in self.last_tile:
+                    self.walk_step[eid] = self.walk_step.get(eid, 0) + 1
+                    self.step_t0[eid] = now
+                self.last_tile[eid] = (ent.x, ent.y)
+
+        # 退場したエンティティ（フロア移動で入れ替わる敵など）の記録を掃除
+        for d in (self.render_pos, self.last_tile, self.step_t0, self.walk_step):
+            for k in [k for k in d if k not in live]:
+                del d[k]
+
+        # --- 攻撃モーション（踏み込み）のオフセットを集計 ---
+        self.attack_off = {}
+        self.attacking = set()
         active = []
-        self.attacking = set()  # 攻撃モーション再生中のエンティティ（ポーズ差替用）
         for anim in self.anims:
             off = anim.offset()
             if off is None:
                 continue  # 再生終了
             active.append(anim)
-            if isinstance(anim, AttackAnim):
-                self.attacking.add(id(anim.entity))
-            ox, oy = offsets.get(id(anim.entity), (0.0, 0.0))
-            offsets[id(anim.entity)] = (ox + off[0], oy + off[1])
+            self.attacking.add(id(anim.entity))
+            ox, oy = self.attack_off.get(id(anim.entity), (0.0, 0.0))
+            self.attack_off[id(anim.entity)] = (ox + off[0], oy + off[1])
         self.anims = active
 
         # エフェクトの寿命管理と被弾フラッシュ強度の集計
@@ -680,10 +891,17 @@ class Renderer:
             if isinstance(fx, FlashAnim):
                 self.flash[id(fx.entity)] = 1.0 - t  # 当たった瞬間が最も白い
         self.fx = active_fx
-        return offsets
 
-    def _draw_fx(self, engine: "Engine", cam_x: int, cam_y: int) -> None:
-        """斬撃・ダメージ数字をエンティティの上に重ねて描く。"""
+    def _entity_screen(self, entity, cam_x: float, cam_y: float) -> tuple:
+        """エンティティの画面描画位置（スムージング済み位置＋攻撃踏み込み−カメラ）。"""
+        px, py = self.render_pos.get(
+            id(entity), (entity.x * TILE_SIZE, entity.y * TILE_SIZE)
+        )
+        ax, ay = self.attack_off.get(id(entity), (0.0, 0.0))
+        return px + ax - cam_x, py + ay - cam_y
+
+    def _draw_fx(self, engine: "Engine", cam_x: float, cam_y: float) -> None:
+        """斬撃・ダメージ数字をエンティティの上に重ねて描く（cam はピクセル座標）。"""
         gm = engine.game_map
         for fx in self.fx:
             if isinstance(fx, FlashAnim):
@@ -693,8 +911,8 @@ class Renderer:
                 continue
             if not gm.in_bounds(fx.x, fx.y) or not gm.visible[fx.x, fx.y]:
                 continue  # 視界外の戦闘（同士討ち等）は描かない
-            sx = (fx.x - cam_x) * TILE_SIZE
-            sy = (fx.y - cam_y) * TILE_SIZE
+            sx = fx.x * TILE_SIZE - cam_x
+            sy = fx.y * TILE_SIZE - cam_y
             if isinstance(fx, SlashAnim):
                 self._draw_slash(fx, t, sx, sy)
             elif isinstance(fx, PopupAnim):
@@ -718,9 +936,16 @@ class Renderer:
         self.screen.blit(surf, (sx, sy))
 
     def _draw_popup(self, fx: PopupAnim, t: float, sx: int, sy: int) -> None:
-        """ダメージ数字：タイル上端から浮き上がり、後半でフェードアウト。"""
+        """ダメージ数字：太字＋影で浮き上がり、後半でフェードアウト。"""
         if fx.surf is None:
-            fx.surf = self.font.render(fx.text, True, fx.color)
+            base = self.font_bold.render(fx.text, True, fx.color)
+            shade = self.font_bold.render(fx.text, True, (6, 6, 10))
+            surf = pygame.Surface(
+                (base.get_width() + 2, base.get_height() + 2), pygame.SRCALPHA
+            )
+            surf.blit(shade, (2, 2))
+            surf.blit(base, (0, 0))
+            fx.surf = surf
         label = fx.surf
         if t > 0.5:
             label.set_alpha(int(255 * (1.0 - t) * 2))
@@ -728,49 +953,86 @@ class Renderer:
         y = sy - 8 - int(fx.RISE * t)
         self.screen.blit(label, (x, y))
 
+    @staticmethod
+    def _ratio_color(ratio: float) -> tuple:
+        """残量ゲージの色（高=緑 / 中=黄 / 低=赤）。"""
+        if ratio > 0.5:
+            return (88, 190, 96)
+        if ratio > 0.25:
+            return (230, 196, 60)
+        return (224, 80, 70)
+
+    def _stat_gauge(self, x: int, y: int, label: str, value_text: str,
+                    ratio: float, color: tuple) -> int:
+        """ラベル＋ゲージ＋数値のひとかたまりを描き、使った幅を返す。"""
+        lw = self._text(label, x, y, color=self.FRAME_LIGHT, bold=True)
+        gx = x + lw + 8
+        self._draw_gauge(gx, y + 5, 96, 16, ratio, color)
+        vw = self._text(value_text, gx + 102, y)
+        return (gx + 102 + vw) - x
+
     def _render_panel(self, engine: "Engine") -> None:
-        """下部パネル：HP とメッセージログ。"""
+        """下部パネル：ステータスゲージ＋ログ（装飾枠ウィンドウ）。"""
         screen = self.screen
         width = self.view_w * TILE_SIZE
-        # パネル背景
-        pygame.draw.rect(
-            screen, (20, 20, 28), (0, self.play_h, width, self.PANEL_HEIGHT)
-        )
-        pygame.draw.line(
-            screen, (60, 60, 70), (0, self.play_h), (width, self.play_h), 1
-        )
+        self._draw_window(0, self.play_h, width, self.PANEL_HEIGHT, alpha=255)
 
-        # パネル上段：HP / スタミナ / モード を横並びで表示
         f = engine.player.fighter
-        y = self.play_h + 6
-        x = 8
+        y = self.play_h + 10
+        x = 14
 
-        hp_surf = self.font.render(f"HP: {f.hp}/{f.max_hp}", True, colors.HP_TEXT)
-        screen.blit(hp_surf, (x, y))
-        x += hp_surf.get_width() + 20
+        # --- 1段目：HP・ST ゲージ／（ダンジョン中）モード・階数チップ
+        hp_ratio = f.hp / max(1, f.max_hp)
+        x += self._stat_gauge(x, y, "HP", f"{f.hp}/{f.max_hp}",
+                              hp_ratio, self._ratio_color(hp_ratio)) + 22
+        if f.uses_stamina:
+            st_ratio = f.stamina / max(1, f.max_stamina)
+            st_color = (86, 160, 222) if f.can_attack() else (224, 80, 70)
+            x += self._stat_gauge(x, y, "ST", f"{f.stamina}(-{f.attack_stamina_cost})",
+                                  st_ratio, st_color) + 22
 
-        # スタミナ（攻撃に足りなければ赤系）。括弧内は1回の攻撃で消費する量。
-        st_color = colors.STAMINA if f.can_attack() else colors.STAMINA_LOW
-        st_surf = self.font.render(
-            f"ST: {f.stamina}/{f.max_stamina}(-{f.attack_stamina_cost})", True, st_color
+        in_dungeon = not engine.in_camp and not getattr(engine, "in_village", False)
+        if in_dungeon:
+            rx = width - 14
+            rx -= self._draw_chip(f"地下 {engine.current_floor} 階", rx, y - 2,
+                                  colors.DESCEND, right_align=True) + 8
+            if engine.attack_mode:
+                self._draw_chip("攻撃モード", rx, y - 2, (255, 130, 130), right_align=True)
+            else:
+                self._draw_chip("移動モード", rx, y - 2, (150, 210, 150), right_align=True)
+
+        # --- 2段目：満腹ゲージ・Lv/XP・実効ステータス・料理バフ
+        y2 = y + self.LINE_HEIGHT
+        x = 14
+        if f.max_satiety > 0:
+            sat_ratio = f.satiety / f.max_satiety
+            if f.is_hungry:
+                x += self._stat_gauge(x, y2, "空腹!", "", sat_ratio, (224, 70, 60)) + 16
+            else:
+                x += self._stat_gauge(x, y2, "満腹", f"{f.satiety}",
+                                      sat_ratio, (226, 150, 62)) + 16
+        lv = engine.player.level
+        x += self._text(f"Lv.{lv.current_level}", x, y2, color=colors.XP, bold=True) + 12
+        x += self._text(f"XP {lv.current_xp}/{lv.experience_to_next_level}",
+                        x, y2, color=self.TEXT_DIM) + 16
+        x += self._text(f"攻 {f.power}  防 {f.defense}", x, y2) + 16
+        for eff in engine.player.status_effects:
+            x += self._text(f"{eff.name}({eff.turns})", x, y2, color=colors.LEVEL_UP) + 12
+
+        # --- 区切り線＋メッセージログ
+        ly = self.play_h + 10 + self.LINE_HEIGHT * 2
+        pygame.draw.line(screen, self.FRAME_DARK, (12, ly - 3), (width - 12, ly - 3), 1)
+        engine.message_log.render(
+            screen,
+            self.font,
+            x=14,
+            y=ly + 2,
+            line_height=self.LINE_HEIGHT,
+            max_lines=self.LOG_LINES,
         )
-        screen.blit(st_surf, (x, y))
-        x += st_surf.get_width() + 20
 
-        # 現在のモード
-        if engine.attack_mode:
-            mode_label, mode_color = "[攻撃モード]", (255, 120, 120)
-        else:
-            mode_label, mode_color = "[移動モード]", (150, 200, 150)
-        screen.blit(self.font.render(mode_label, True, mode_color), (x, y))
-
-        # 階層表示・文脈ヒント（ダンジョン中のみ。村/拠点では別途案内）
-        if not engine.in_camp and not getattr(engine, "in_village", False):
-            floor_surf = self.font.render(
-                f"地下 {engine.current_floor} 階", True, colors.DESCEND
-            )
-            screen.blit(floor_surf, (width - floor_surf.get_width() - 10, y))
-
+        # --- 足元・階段の案内チップ（プレイ画面の右下に浮かせる）
+        if in_dungeon:
             hint_text = None
             hint_color = colors.DESCEND
             if (engine.player.x, engine.player.y) == engine.game_map.downstairs_location:
@@ -781,55 +1043,26 @@ class Renderer:
                     hint_text = f"足元: {foot.name}（G で拾う）"
                     hint_color = colors.ITEM
             if hint_text:
-                hint = self.font.render(hint_text, True, hint_color)
-                screen.blit(hint, (width - hint.get_width() - 10, y + self.LINE_HEIGHT))
-
-        # 2段目：レベル・経験値・実効ステータス（装備込み）
-        lv = engine.player.level
-        lv_surf = self.font.render(
-            f"Lv.{lv.current_level}  XP:{lv.current_xp}/{lv.experience_to_next_level}"
-            f"   攻撃{f.power} 防御{f.defense}",
-            True,
-            colors.XP,
-        )
-        screen.blit(lv_surf, (8, y + self.LINE_HEIGHT))
-
-        # 満腹度（空腹なら赤で警告）＋ 一時バフ（料理効果）
-        row1_y = y + self.LINE_HEIGHT
-        sx = 8 + lv_surf.get_width() + 24
-        if f.max_satiety > 0:
-            if f.is_hungry:
-                sat_text, sat_color = "空腹！", (255, 80, 80)
-            else:
-                sat_text = f"満腹:{f.satiety}/{f.max_satiety}"
-                sat_color = colors.STAMINA if f.satiety > 20 else colors.STAMINA_LOW
-            sat_surf = self.font.render(sat_text, True, sat_color)
-            screen.blit(sat_surf, (sx, row1_y))
-            sx += sat_surf.get_width() + 20
-        for eff in engine.player.status_effects:
-            eff_surf = self.font.render(f"{eff.name}({eff.turns})", True, colors.LEVEL_UP)
-            screen.blit(eff_surf, (sx, row1_y))
-            sx += eff_surf.get_width() + 14
-
-        # メッセージログ（3段目以降）
-        engine.message_log.render(
-            screen,
-            self.font,
-            x=8,
-            y=self.play_h + 6 + self.LINE_HEIGHT * 2,
-            line_height=self.LINE_HEIGHT,
-            max_lines=self.LOG_LINES,
-        )
+                self._draw_chip(hint_text, width - 10, self.play_h - 36,
+                                hint_color, right_align=True)
 
     def _render_game_over(self) -> None:
         screen = self.screen
-        text = self.big_font.render("ゲームオーバー", True, colors.PLAYER_DIE)
-        rect = text.get_rect(
-            center=(self.view_w * TILE_SIZE // 2, self.play_h // 2)
-        )
-        # 背景を少し暗くして文字を目立たせる
-        backdrop = pygame.Surface(text.get_size())
-        backdrop.set_alpha(180)
-        backdrop.fill((0, 0, 0))
-        screen.blit(backdrop, rect.topleft)
-        screen.blit(text, rect)
+        w = self.view_w * TILE_SIZE
+        # 画面全体を暗く沈める
+        overlay = pygame.Surface((w, self.play_h))
+        overlay.set_alpha(150)
+        overlay.fill((6, 2, 2))
+        screen.blit(overlay, (0, 0))
+
+        text = "ゲームオーバー"
+        tw = self.big_font.size(text)[0]
+        bw, bh = tw + 96, 116
+        bx, by = (w - bw) // 2, self.play_h // 2 - bh // 2
+        self._draw_window(bx, by, bw, bh, alpha=250)
+        tx = bx + (bw - tw) // 2
+        screen.blit(self.big_font.render(text, True, (6, 6, 10)), (tx + 4, by + 24 + 4))
+        screen.blit(self.big_font.render(text, True, colors.PLAYER_DIE), (tx, by + 24))
+        tip = "ESC でタイトルへ"
+        self._text(tip, bx + (bw - self.font.size(tip)[0]) // 2, by + bh - 32,
+                   color=self.TEXT_DIM, shadow=False)

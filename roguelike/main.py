@@ -9,8 +9,8 @@ from input_handlers import held_movement_action
 
 MAP_WIDTH = 80
 MAP_HEIGHT = 50
-VIEW_W = 24  # 画面に映すタイル数（横）
-VIEW_H = 17  # 画面に映すタイル数（縦）
+VIEW_W = 16  # 画面に映すタイル数（横。TILE_SIZE=64 で 16×64=1024px）
+VIEW_H = 10  # 画面に映すタイル数（縦。10×64=640px ＋下部パネル）
 MOVE_COOLDOWN_MS = 120  # 押しっぱなし時の移動間隔（小さいほど速い）
 
 _UP = (pygame.K_UP, pygame.K_w, pygame.K_k)
