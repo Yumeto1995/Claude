@@ -237,6 +237,54 @@ def make_door(rng):
     return s
 
 
+def make_meadow_floor(rng, safe: bool = False):
+    """草原ダンジョンの床＝踏み固めた土。小石と、縁から覗く草でグラスランド感を出す。
+
+    safe=True はセーフルーム用に少し緑がかった明るい土にして見分けやすくする。
+    """
+    base = (156, 126, 86) if not safe else (150, 150, 104)
+    s = make_surface(base, 10, rng)
+    tones = ([(138, 110, 74), (172, 142, 100)] if not safe
+             else [(132, 142, 96), (168, 168, 120)])
+    for _ in range(7):  # 土の明暗ムラ
+        cx, cy = rng.randint(4, S - 4), rng.randint(4, S - 4)
+        _blob(s, cx, cy, rng.randint(6, 11), rng.choice(tones), density=0.5, rng=rng)
+    for _ in range(rng.randint(4, 7)):  # 小石
+        sx, sy = rng.randint(4, S - 4), rng.randint(4, S - 4)
+        _blob(s, sx, sy, rng.randint(1, 2), rng.choice([(120, 108, 92), (150, 140, 124)]))
+    for _ in range(rng.randint(8, 16)):  # 縁から覗く草
+        x, y = rng.randint(1, S - 2), rng.randint(4, S - 2)
+        c = rng.choice([(96, 140, 70), (76, 116, 56)])
+        for k in range(rng.randint(2, 3)):
+            if 0 <= y - k < S:
+                s.set_at((x, y - k), (*c, 255))
+    return s
+
+
+def make_meadow_wall(rng):
+    """草原ダンジョンの壁＝丈の高い茂み（暗緑の塊＋葉先ハイライト）に岩を少し混ぜる。"""
+    base = (52, 92, 46)
+    s = make_surface(base, 10, rng)
+    for _ in range(10):  # 茂みの塊
+        cx, cy = rng.randint(2, S - 2), rng.randint(2, S - 2)
+        tone = rng.choice([(42, 78, 40), (66, 112, 56), (80, 130, 66)])
+        _blob(s, cx, cy, rng.randint(5, 11), tone, density=0.6, rng=rng)
+    for _ in range(120):  # 葉
+        x, y = rng.randint(0, S - 1), rng.randint(3, S - 1)
+        c = rng.choice([(80, 130, 62), (96, 150, 74), (40, 74, 38)])
+        for k in range(rng.randint(2, 5)):
+            if 0 <= y - k < S:
+                s.set_at((x, y - k), (*c, 255))
+        if rng.random() < 0.3 and y - 5 >= 0:
+            s.set_at((x, y - 5), (142, 188, 102, 255))  # 葉先ハイライト
+    for _ in range(rng.randint(1, 2)):  # 岩
+        rx, ry = rng.randint(8, S - 8), rng.randint(8, S - 8)
+        r = rng.randint(4, 6)
+        _blob(s, rx, ry, r, (120, 118, 124))
+        _blob(s, rx - 1, ry - 1, max(1, r - 2), (152, 150, 156))
+    return s
+
+
 def generate():
     vrng = random.Random(20240601)
     extras = {
@@ -250,6 +298,10 @@ def generate():
         "door": make_door(vrng),
         "stairs_up": make_stairs(vrng, up=True),
         "stairs_down": make_stairs(vrng, up=False),
+        # 草原ダンジョン（浅層テーマ）：床=土 / 壁=茂み
+        "meadow_floor": make_meadow_floor(vrng),
+        "meadow_safe_floor": make_meadow_floor(vrng, safe=True),
+        "meadow_wall": make_meadow_wall(vrng),
     }
     for name, surf in extras.items():
         pygame.image.save(surf, os.path.join(ASSETS_DIR, f"{name}.png"))

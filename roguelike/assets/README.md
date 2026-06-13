@@ -54,25 +54,28 @@ cd assets && python3 gen_sprites.py   # 5枚を assets 直下に再生成
 
 ## ダンジョン地形の再生成（gen_tiles.py）
 
-ダンジョンの床/壁は**階層テーマ別**（浅層=洞窟 `cave` / 深層=石 `stone`）で、
+ダンジョンの床/壁は**階層テーマ別**（浅層=草原 `meadow` / 中層=洞窟 `cave` / 深層=石 `stone`）で、
 **`gen_tiles.py`** が下地テクスチャを生成する：
 
 ```bash
-cd assets && python3 gen_tiles.py   # cave_/stone_ の floor/wall/safe_floor を再生成
+cd assets && python3 gen_tiles.py   # meadow_/cave_/stone_ の floor/wall/safe_floor を再生成
 ```
 
 壁は隣接状況を見て**床に面した側だけ縁取り**し（壁同士の辺は描かない＝塊が連結して見える）、
 床は壁際に影を落とす。この向き別の縁取り・影は `graphics.py` が下地に重ねて描く（オートタイル）ので、
-追加の向き別PNGは不要。色を変えるときは `gen_tiles.py` の `PALETTES` を編集する。
-浅層/深層の境目は `graphics.py` の `Renderer.CAVE_MAX_FLOOR`（既定3階まで洞窟）。
+追加の向き別PNGは不要。色を変えるときは `gen_tiles.py` の `PALETTES`／各 `make_*` を編集する。
+テーマの境目は `graphics.py` の `Renderer.MEADOW_MAX_FLOOR`（既定3階まで草原）と
+`CAVE_MAX_FLOOR`（既定6階まで洞窟・以降は石）。
 
 ### 背景（地形）
 | ファイル | 用途 |
 |----------|------|
-| `cave_floor.png` / `cave_wall.png` / `cave_safe_floor.png` | 洞窟テーマ（浅層）の下地 |
+| `meadow_floor.png` / `meadow_wall.png` / `meadow_safe_floor.png` | 草原テーマ（浅層）：床=踏み固めた土 / 壁=丈の高い茂み＋岩 |
+| `cave_floor.png` / `cave_wall.png` / `cave_safe_floor.png` | 洞窟テーマ（中層）の下地 |
 | `stone_floor.png` / `stone_wall.png` / `stone_safe_floor.png` | 石テーマ（深層）の下地 |
 | `stairs_down.png` / `stairs_up.png` | 下り階段（▼寒色）・上り階段（▲暖色）。村の洞窟入口は下り |
-| `grass.png` / `tree.png` / `door.png` | 村：草地・森の木・ドア（`gen_tiles.py` が生成） |
+| `grass.png` ＋ `grass_flower/clover/stone/dirt.png` | 村の草地（5バリアントをタイル毎に敷き分け） |
+| `tree.png` / `door.png` | 村：森の木・ドア（`gen_tiles.py` が生成） |
 | `wood_wall.png` / `wood_floor.png` | 村の建物・建物内の壁/床（同上） |
 | `floor.png` / `safe_floor.png` / `wall.png` | 拠点（テント内）で使う汎用の床/壁 |
 

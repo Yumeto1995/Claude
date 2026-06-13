@@ -143,6 +143,7 @@ PLACEHOLDER_COLORS: Dict[str, tuple] = {
     # 壁の向き別の縁取り・床の影は描画側でこの上に重ねる（オートタイル）。
     "cave_floor": (96, 80, 62), "cave_wall": (58, 49, 42), "cave_safe_floor": (74, 100, 90),
     "stone_floor": (78, 80, 98), "stone_wall": (52, 54, 70), "stone_safe_floor": (72, 102, 96),
+    "meadow_floor": (156, 126, 86), "meadow_wall": (52, 92, 46), "meadow_safe_floor": (150, 150, 104),
     # 村・建物（gen_tiles.py が生成）
     "grass": (74, 112, 58), "tree": (44, 84, 44), "door": (150, 110, 66),
     "wood_wall": (104, 72, 44), "wood_floor": (150, 112, 70),
@@ -152,6 +153,7 @@ TERRAIN_KEYS = {
     "floor", "wall",
     "cave_floor", "cave_wall", "cave_safe_floor",
     "stone_floor", "stone_wall", "stone_safe_floor",
+    "meadow_floor", "meadow_wall", "meadow_safe_floor",
     "grass", "tree", "door", "wood_wall", "wood_floor",
 }
 
@@ -478,12 +480,17 @@ class Renderer:
             return (world - view) / 2.0   # 負値＝マップを中央へ寄せる
         return max(0.0, min(cam, world - view))
 
-    # ダンジョンの階層テーマ（浅層＝洞窟 / 深層＝石）。
-    CAVE_MAX_FLOOR = 3
+    # ダンジョンの階層テーマ（浅層＝草原 / 中層＝洞窟 / 深層＝石）。
+    MEADOW_MAX_FLOOR = 3   # ここまで草原（床=土・壁=茂み）
+    CAVE_MAX_FLOOR = 6     # ここまで洞窟、以降は石
 
     @staticmethod
     def _dungeon_theme(floor: int) -> str:
-        return "cave" if floor <= Renderer.CAVE_MAX_FLOOR else "stone"
+        if floor <= Renderer.MEADOW_MAX_FLOOR:
+            return "meadow"
+        if floor <= Renderer.CAVE_MAX_FLOOR:
+            return "cave"
+        return "stone"
 
     @staticmethod
     def _is_wall(gm, x: int, y: int) -> bool:
