@@ -30,7 +30,21 @@ def load_game(path: str = SAVE_PATH):
         "unlocked_zones": set(), "storage": [],
         "camp_menu": None, "cook_pot": [], "pending_moves": [],
         "inventory_cursor": 0, "pending_fx": [],
+        "building_key": None, "building_exit": None, "building_return": (0, 0),
+        "shop_kind": None, "shop_cursor": 0, "village_outdoor_map": None,
+        "skill_open": False, "skill_branch": 0, "skill_tier": 0,
+        "floors": {},
     }
+    # 旧セーブのプレイヤーにスキルツリーが無ければ付与
+    pl = getattr(engine, "player", None)
+    if pl is not None and getattr(pl, "skills", None) is None:
+        from skills import Skills
+        sk = Skills()
+        pl.skills = sk
+        sk.entity = pl
+        if pl.level is not None:
+            sk.snapshots = {1: (frozenset(), 0)}
+            pl.level.skills = sk
     for attr, default in defaults.items():
         if not hasattr(engine, attr):
             setattr(engine, attr, default)

@@ -124,6 +124,7 @@ PLACEHOLDER_COLORS: Dict[str, tuple] = {
     "material": (120, 180, 120),
     "key_item": (240, 210, 90),
     "stairs_down": (120, 220, 255),
+    "stairs_up": (240, 210, 120),
     "tent": (90, 170, 90),
     "food": (220, 180, 120),
     "seed": (170, 140, 80),
@@ -138,9 +139,21 @@ PLACEHOLDER_COLORS: Dict[str, tuple] = {
     "farm_empty": (110, 80, 55),
     "farm_grow": (120, 170, 90),
     "farm_ready": (230, 220, 90),
+    # ダンジョンのテーマ別 下地（gen_tiles.py が生成）。
+    # 壁の向き別の縁取り・床の影は描画側でこの上に重ねる（オートタイル）。
+    "cave_floor": (96, 80, 62), "cave_wall": (58, 49, 42), "cave_safe_floor": (74, 100, 90),
+    "stone_floor": (78, 80, 98), "stone_wall": (52, 54, 70), "stone_safe_floor": (72, 102, 96),
+    # 村・建物（gen_tiles.py が生成）
+    "grass": (74, 112, 58), "tree": (44, 84, 44), "door": (150, 110, 66),
+    "wood_wall": (104, 72, 44), "wood_floor": (150, 112, 70),
 }
 
-TERRAIN_KEYS = {"floor", "wall"}
+TERRAIN_KEYS = {
+    "floor", "wall",
+    "cave_floor", "cave_wall", "cave_safe_floor",
+    "stone_floor", "stone_wall", "stone_safe_floor",
+    "grass", "tree", "door", "wood_wall", "wood_floor",
+}
 
 # 日本語フォントの探索候補（上から順に試す）。
 # 同梱の PixelMplus（ドット絵調・M+ライセンス）を最優先。
@@ -253,6 +266,9 @@ class Renderer:
         self.walk_step = {}              # id(entity) → 歩数（walk1/walk2 の交互判定）
         self.now = 0.0                   # 現在時刻（_update_animations で更新）
         self._last_frame_t = None        # 前フレームの時刻（dt 計算用）
+        # オートタイルの合成結果キャッシュ（向き別の壁・床影は隣接状況で決まる）
+        self._wall_cache = {}            # (theme, mask, dark) → Surface
+        self._floor_cache = {}           # (key, smask, dark) → Surface
 
     CONTROLS = [
         "移動：矢印 / WASD / vi / テンキー（斜め・2方向同時可）",
@@ -404,6 +420,142 @@ class Renderer:
         cam_y = max(0.0, min(cam_y, gm.height * TILE_SIZE - vh))
         return cam_x, cam_y
 
+    # ダンジョンの階層テーマ（浅層＝洞窟 / 深層＝石）。
+    CAVE_MAX_FLOOR = 3
+
+    @staticmethod
+    def _dungeon_theme(floor: int) -> str:
+        return "cave" if floor <= Renderer.CAVE_MAX_FLOOR else "stone"
+
+    @staticmethod
+    def _is_wall(gm, x: int, y: int) -> bool:
+        """(x,y) が壁か。マップ外も壁扱い（外周がスカスカに見えないように）。"""
+        if not gm.in_bounds(x, y):
+            return True
+        return gm.tiles["sprite"][x, y] == tile_types.SPRITE_WALL
+
+    # マスク用ビット（8近傍）
+    _N, _S, _E, _W = 1, 2, 4, 8
+    _NE, _NW, _SE, _SW = 16, 32, 64, 128
+
+    def _wall_mask(self, gm, x: int, y: int) -> int:
+        """隣接8マスのうち『壁である』方向のビットマスク。"""
+        m = 0
+        if self._is_wall(gm, x, y - 1): m |= self._N
+        if self._is_wall(gm, x, y + 1): m |= self._S
+        if self._is_wall(gm, x + 1, y): m |= self._E
+        if self._is_wall(gm, x - 1, y): m |= self._W
+        if self._is_wall(gm, x + 1, y - 1): m |= self._NE
+        if self._is_wall(gm, x - 1, y - 1): m |= self._NW
+        if self._is_wall(gm, x + 1, y + 1): m |= self._SE
+        if self._is_wall(gm, x - 1, y + 1): m |= self._SW
+        return m
+
+    def _wall_surface(self, theme: str, mask: int, dark: bool) -> pygame.Surface:
+        """壁の下地に『床へ面した側だけ』縁取り（光源=左上の立体感）を重ねた1枚。
+
+        壁同士が隣り合う辺には縁取りを描かないので、壁の塊が連結して見える。
+        結果は (theme, mask, dark) でキャッシュする。
+        """
+        key = (theme, mask, dark)
+        cached = self._wall_cache.get(key)
+        if cached is not None:
+            return cached
+        surf = self.sprites[f"{theme}_wall"].copy()
+        T = TILE_SIZE
+        N = not (mask & self._N); S = not (mask & self._S)
+        E = not (mask & self._E); W = not (mask & self._W)
+
+        def band(rect, color, alpha):
+            ov = pygame.Surface((rect[2], rect[3]), pygame.SRCALPHA)
+            ov.fill((*color, alpha))
+            surf.blit(ov, (rect[0], rect[1]))
+
+        LIGHT = (255, 246, 224)
+        DARK = (0, 0, 0)
+        # 床に面した辺＝立体の縁。上/左は明るく、下/右は影。
+        if N:  # 上が床：頂部に光
+            band((0, 0, T, 4), LIGHT, 70); band((0, 0, T, 1), LIGHT, 150)
+        if W:  # 左が床：左面に光
+            band((0, 0, 4, T), LIGHT, 60); band((0, 0, 1, T), LIGHT, 130)
+        if E:  # 右が床：右面に影
+            band((T - 4, 0, 4, T), DARK, 70); band((T - 1, 0, 1, T), DARK, 120)
+        if S:  # 下が床：前面の段差＋接地の濃い影
+            band((0, T - 6, T, 6), DARK, 80); band((0, T - 2, T, 2), DARK, 150)
+        # 入り隅（斜めだけ床）：その角に小さな影を入れて窪みを表現
+        for dia, (cx, cy), need in (
+            (self._NE, (T - 6, 0), self._N | self._E),
+            (self._NW, (0, 0), self._N | self._W),
+            (self._SE, (T - 6, T - 6), self._S | self._E),
+            (self._SW, (0, T - 6), self._S | self._W),
+        ):
+            if not (mask & dia) and (mask & need) == need:
+                band((cx, cy, 6, 6), DARK, 80)
+
+        if dark:
+            surf = self._darken(surf)
+        self._wall_cache[key] = surf
+        return surf
+
+    def _floor_surface(self, key: str, smask: int, dark: bool) -> pygame.Surface:
+        """床の下地に、北/西に壁があれば『壁が落とす影』を重ねた1枚。
+
+        壁際が暗くなることで壁と床の境界・つながりが分かりやすくなる。
+        smask: bit0=北が壁, bit1=西が壁。
+        """
+        ckey = (key, smask, dark)
+        cached = self._floor_cache.get(ckey)
+        if cached is not None:
+            return cached
+        surf = self.sprites[key].copy()
+        T = TILE_SIZE
+        if smask & 1:  # 北に壁 → 上端に下向きの影グラデーション
+            for i in range(7):
+                a = int(95 * (1 - i / 7))
+                ov = pygame.Surface((T, 1), pygame.SRCALPHA); ov.fill((0, 0, 0, a))
+                surf.blit(ov, (0, i))
+        if smask & 2:  # 西に壁 → 左端に右向きの影グラデーション
+            for i in range(7):
+                a = int(85 * (1 - i / 7))
+                ov = pygame.Surface((1, T), pygame.SRCALPHA); ov.fill((0, 0, 0, a))
+                surf.blit(ov, (i, 0))
+        if dark:
+            surf = self._darken(surf)
+        self._floor_cache[ckey] = surf
+        return surf
+
+    def _draw_dungeon_terrain(self, engine, gm, cam_x: float, cam_y: float) -> None:
+        """テーマ別＋オートタイルでダンジョン地形を描く。
+
+        壁は床に面した側だけ縁取りして連結表示、床は壁際に影を落として
+        境界を明確化する。見えている=明るく / 探索済み=暗く / 未探索=描かない。
+        """
+        screen = self.screen
+        theme = self._dungeon_theme(engine.current_floor)
+        tx0, ty0 = int(cam_x // TILE_SIZE), int(cam_y // TILE_SIZE)
+        for ty in range(ty0, ty0 + self.view_h + 2):
+            for tx in range(tx0, tx0 + self.view_w + 2):
+                if not gm.in_bounds(tx, ty):
+                    continue
+                vis = gm.visible[tx, ty]
+                if not vis and not gm.explored[tx, ty]:
+                    continue  # 未探索は黒のまま
+                dark = not vis
+                sid = gm.tiles["sprite"][tx, ty]
+                pos = (tx * TILE_SIZE - cam_x, ty * TILE_SIZE - cam_y)
+                if sid == tile_types.SPRITE_WALL:
+                    surf = self._wall_surface(theme, self._wall_mask(gm, tx, ty), dark)
+                elif sid == tile_types.SPRITE_DOWNSTAIRS:
+                    surf = self.dark_sprites["stairs_down"] if dark else self.sprites["stairs_down"]
+                elif sid == tile_types.SPRITE_UPSTAIRS:
+                    surf = self.dark_sprites["stairs_up"] if dark else self.sprites["stairs_up"]
+                else:
+                    base = f"{theme}_safe_floor" if gm.safe[tx, ty] else f"{theme}_floor"
+                    smask = (1 if self._is_wall(gm, tx, ty - 1) else 0) \
+                        | (2 if self._is_wall(gm, tx - 1, ty) else 0)
+                    surf = self._floor_surface(base, smask, dark)
+                screen.blit(surf, pos)
+
     def _draw_terrain(self, gm, cam_x: float, cam_y: float, surf_of) -> None:
         """ピクセルカメラに合わせて地形タイルを敷き詰める。
 
@@ -424,12 +576,16 @@ class Renderer:
         screen = self.screen
         screen.fill((0, 0, 0))
 
-        # 村は専用描画
+        # 村・建物は専用描画
         if getattr(engine, "in_village", False):
             self._render_village_map(engine)
             self._render_panel(engine)
             if getattr(engine, "dialogue", None) is not None:
                 self._render_dialogue(engine)
+            if getattr(engine, "shop_kind", None) is not None:
+                self._render_shop_menu(engine)
+            if getattr(engine, "skill_open", False):
+                self._render_skill_tree(engine)
             pygame.display.flip()
             return
 
@@ -448,23 +604,8 @@ class Renderer:
         self._update_animations(engine)
         cam_x, cam_y = self._camera_px(engine)
 
-        # 地形を描画（見えている=明るく / 探索済み=暗く / 未探索=黒）
-        def terrain(tx, ty):
-            sid = gm.tiles["sprite"][tx, ty]
-            if sid == tile_types.SPRITE_WALL:
-                key = "wall"
-            elif sid == tile_types.SPRITE_DOWNSTAIRS:
-                key = "stairs_down"
-            elif gm.safe[tx, ty]:
-                key = "safe_floor"
-            else:
-                key = "floor"
-            if gm.visible[tx, ty]:
-                return self.sprites[key]
-            if gm.explored[tx, ty]:
-                return self.dark_sprites[key]
-            return None  # 未探索は描かない
-        self._draw_terrain(gm, cam_x, cam_y, terrain)
+        # 地形を描画（テーマ別＋オートタイルで壁を連結・床に影）
+        self._draw_dungeon_terrain(engine, gm, cam_x, cam_y)
 
         # エンティティを描画（死体→生者の順）。見えているタイルのものだけ。
         vw, vh = self.view_w * TILE_SIZE, self.view_h * TILE_SIZE
@@ -497,35 +638,46 @@ class Renderer:
         if engine.inventory_open:
             self._render_inventory(engine)
 
+        if getattr(engine, "skill_open", False):
+            self._render_skill_tree(engine)
+
         if engine.game_over:
             self._render_game_over()
 
         pygame.display.flip()
 
     def _render_village_map(self, engine: "Engine") -> None:
-        """村マップ（地形・NPC・入口・看板・プレイヤー・案内）。"""
+        """村・建物内マップ（地形・NPC/店主・ドア・看板・プレイヤー・案内）。"""
         import village_map
 
         screen = self.screen
         gm = engine.game_map
+        indoors = getattr(engine, "building_key", None) is not None
         self._update_animations(engine)
         cam_x, cam_y = self._camera_px(engine)
+
+        floor_key = "wood_floor" if indoors else "grass"
 
         def terrain(tx, ty):
             sid = gm.tiles["sprite"][tx, ty]
             if sid == tile_types.SPRITE_WALL:
-                return self.sprites["wall"]
+                return self.sprites["wood_wall"]
+            if sid == tile_types.SPRITE_TREE:
+                return self.sprites["tree"]
+            if sid == tile_types.SPRITE_DOOR:
+                return self.sprites["door"]
             if sid == tile_types.SPRITE_DOWNSTAIRS:
                 return self.sprites["stairs_down"]
-            return self.sprites["floor"]
+            return self.sprites[floor_key]
         self._draw_terrain(gm, cam_x, cam_y, terrain)
 
-        # 看板（区画名）
-        for text, lx, ly in village_map.LABELS:
-            self._text(text, lx * TILE_SIZE - cam_x, ly * TILE_SIZE - cam_y,
-                       color=(214, 206, 156), bold=True)
+        # 看板（屋外のみ。建物内は店名を案内チップで出す）
+        if not indoors:
+            for text, lx, ly in village_map.LABELS:
+                self._text(text, lx * TILE_SIZE - cam_x, ly * TILE_SIZE - cam_y,
+                           color=(238, 226, 170), bold=True)
 
-        # エンティティ（NPC→プレイヤーの順）。スムージング位置で描く。
+        # エンティティ（NPC/店主→プレイヤーの順）。スムージング位置で描く。
         vw, vh = self.view_w * TILE_SIZE, self.view_h * TILE_SIZE
         for ent in sorted(gm.entities, key=lambda e: e is engine.player):
             sx, sy = self._entity_screen(ent, cam_x, cam_y)
@@ -534,14 +686,31 @@ class Renderer:
                 self._draw_shadow(sx, sy)
                 screen.blit(spr, (sx, sy))
 
-        # 足元/隣の案内
+        # 建物内の見出し
+        if indoors:
+            import buildings
+            self._draw_chip(buildings.label(engine.building_key), 8, 8, colors.WELCOME)
+
+        # 足元/隣の案内チップ
         px, py = engine.player.x, engine.player.y
         hint = None
-        if (px, py) == village_map.DUNGEON_ENTRANCE:
-            hint = "Enter で ダンジョンへ"
+        if not indoors and (px, py) == village_map.DUNGEON_ENTRANCE:
+            hint = "Enter で 洞窟（ダンジョン）へ"
+        elif not indoors and (px, py) in village_map.DOORS:
+            import buildings
+            hint = f"Enter で {buildings.label(village_map.DOORS[(px, py)])} に入る"
+        elif indoors and (px, py) == engine.building_exit:
+            hint = "Enter で 村へ戻る"
         else:
             for ent in gm.entities:
-                if getattr(ent, "dialogue", None) and max(abs(ent.x - px), abs(ent.y - py)) == 1:
+                if ent is engine.player:
+                    continue
+                if max(abs(ent.x - px), abs(ent.y - py)) != 1:
+                    continue
+                if getattr(ent, "shop", None):
+                    hint = f"Enter で {ent.name} と取引"
+                    break
+                if getattr(ent, "dialogue", None):
                     hint = f"Enter で {ent.name} と話す"
                     break
         if hint:
@@ -566,6 +735,113 @@ class Renderer:
         tip = "Enter で閉じる"
         self._text(tip, bx + bw - self.font.size(tip)[0] - 16, by + bh - 30,
                    color=self.TEXT_DIM, shadow=False)
+
+    def _render_shop_menu(self, engine: "Engine") -> None:
+        """店（買い物）のウィンドウ。品名・価格・所持金を表示し、買えない品は淡色。"""
+        import shop
+        kind = engine.shop_kind
+        opts = shop.options(engine, kind)
+        info = shop.info(engine, kind)
+
+        w = self.view_w * TILE_SIZE
+        ww = 560
+        wh = 70 + len(info) * self.LINE_HEIGHT + max(1, len(opts)) * self.LINE_HEIGHT + 16
+        wx, wy = (w - ww) // 2, 28
+        self._draw_window(wx, wy, ww, wh)
+
+        x, y = wx + 22, wy + 14
+        self._text(shop.title(kind), x, y, color=self.TEXT_GOLD, bold=True)
+        pygame.draw.line(self.screen, self.FRAME_DARK,
+                         (wx + 14, y + 32), (wx + ww - 14, y + 32), 1)
+        cy = y + 40
+        for line in info:
+            self._text(line, x, cy, color=self.TEXT_DIM, shadow=False)
+            cy += self.LINE_HEIGHT
+        cy += 6
+        cursor = min(engine.shop_cursor, max(0, len(opts) - 1))
+        if not opts:
+            self._text("（品物がない）", x, cy, color=self.TEXT_DIM)
+        for i, opt in enumerate(opts):
+            row = cy + i * self.LINE_HEIGHT
+            if i == cursor:
+                pygame.draw.rect(self.screen, (46, 52, 86), (wx + 12, row - 3, ww - 24, self.LINE_HEIGHT))
+                pygame.draw.rect(self.screen, (104, 112, 168), (wx + 12, row - 3, ww - 24, self.LINE_HEIGHT), 1)
+                pygame.draw.rect(self.screen, self.TEXT_GOLD, (wx + 12, row - 3, 3, self.LINE_HEIGHT))
+                self._text("▶", x, row, color=self.TEXT_GOLD, bold=True)
+            if not opt.get("enabled", True):
+                color = (118, 118, 124)   # 高い/満杯で買えない
+            elif i == cursor:
+                color = self.TEXT_GOLD
+            else:
+                color = self.TEXT_MAIN
+            self._text(opt["text"], x + 30, row, color=color, shadow=(i == cursor))
+
+    def _render_skill_tree(self, engine: "Engine") -> None:
+        """スキルツリー：9系統×3段の格子。習得済/習得可/前提未達を色分け表示。"""
+        import skills as sk_mod
+        sk = engine.player.skills
+        screen = self.screen
+        w = self.view_w * TILE_SIZE
+        h = self.play_h + self.PANEL_HEIGHT
+
+        overlay = pygame.Surface((w, h)); overlay.set_alpha(180); overlay.fill((4, 5, 9))
+        screen.blit(overlay, (0, 0))
+
+        wx, wy, ww, wh = 24, 24, w - 48, h - 48
+        self._draw_window(wx, wy, ww, wh)
+        self._text("スキルツリー", wx + 20, wy + 12, color=self.TEXT_GOLD, bold=True)
+        self._text(f"スキルポイント：{sk.points}", wx + 220, wy + 12,
+                   color=self.TEXT_GOLD, bold=True)
+        self._text(f"Lv.{engine.player.level.current_level}（お金＝経験値を使うと下がる）",
+                   wx + 420, wy + 12, color=self.TEXT_DIM, shadow=False)
+        pygame.draw.line(screen, self.FRAME_DARK,
+                         (wx + 14, wy + 44), (wx + ww - 14, wy + 44), 1)
+
+        branches = sk_mod.BRANCH_KEYS
+        n = len(branches)
+        col_w = (ww - 40) // n
+        grid_x = wx + 20
+        grid_y = wy + 60
+        cell_h = 78
+        node_w, node_h = col_w - 10, 64
+
+        for bi, branch in enumerate(branches):
+            cx = grid_x + bi * col_w
+            # 系統名（縦の見出し）
+            label = sk_mod.BRANCH_LABEL[branch]
+            sel_branch = bi == engine.skill_branch
+            self._text(label, cx + (node_w - self.font.size(label)[0]) // 2, grid_y - 28,
+                       color=self.TEXT_GOLD if sel_branch else self.FRAME_LIGHT, bold=True)
+            for tier in range(sk_mod.TIERS):
+                ny = grid_y + tier * cell_h
+                unlocked = sk.is_unlocked(branch, tier)
+                can = sk.can_unlock(branch, tier)
+                selected = sel_branch and tier == engine.skill_tier
+                # 枠の色：習得済=緑 / 習得可=金 / それ以外=灰
+                if unlocked:
+                    bg, border = (34, 64, 40), (96, 190, 110)
+                elif can:
+                    bg, border = (54, 50, 30), self.TEXT_GOLD
+                else:
+                    bg, border = (28, 30, 40), (70, 72, 88)
+                pygame.draw.rect(screen, bg, (cx, ny, node_w, node_h))
+                pygame.draw.rect(screen, border, (cx, ny, node_w, node_h),
+                                 3 if selected else 1)
+                if selected:  # 選択枠を強調
+                    pygame.draw.rect(screen, self.TEXT_GOLD, (cx, ny, node_w, node_h), 3)
+                # 列見出しに系統名があるので、ノードは段名（心得/鍛錬/極意）＋効果
+                nm = sk_mod.TIER_NAME[tier]
+                ds = sk_mod.node_desc(branch, tier)
+                mark = "✓" if unlocked else ("●" if can else "・")
+                tcol = (220, 240, 220) if unlocked else (self.TEXT_MAIN if can else (120, 122, 134))
+                self._text(f"{mark}{nm}", cx + 6, ny + 5, color=tcol, shadow=False)
+                self._text(ds, cx + 6, ny + 33,
+                           color=(196, 198, 210) if (can or unlocked) else (110, 112, 124),
+                           shadow=False)
+
+        # 下部の操作ヒント
+        self._text("←→ 系統　↑↓ 段　Enter 習得　t/ESC 閉じる",
+                   wx + 20, wy + wh - 34, color=self.TEXT_DIM, shadow=False)
 
     def _render_camp_map(self, engine: "Engine") -> None:
         """歩けるテント内マップ（地形・設備・区画名・プレイヤー・案内）。"""
@@ -1013,7 +1289,9 @@ class Renderer:
                                       sat_ratio, (226, 150, 62)) + 16
         lv = engine.player.level
         x += self._text(f"Lv.{lv.current_level}", x, y2, color=colors.XP, bold=True) + 12
-        x += self._text(f"XP {lv.current_xp}/{lv.experience_to_next_level}",
+        # 所持金＝経験値（使うとレベルが下がる）。金色で強調。
+        x += self._text(f"所持金 {lv.wealth()}", x, y2, color=self.TEXT_GOLD, bold=True) + 14
+        x += self._text(f"次Lv {lv.experience_to_next_level - lv.current_xp}",
                         x, y2, color=self.TEXT_DIM) + 16
         x += self._text(f"攻 {f.power}  防 {f.defense}", x, y2) + 16
         for eff in engine.player.status_effects:
@@ -1035,8 +1313,12 @@ class Renderer:
         if in_dungeon:
             hint_text = None
             hint_color = colors.DESCEND
-            if (engine.player.x, engine.player.y) == engine.game_map.downstairs_location:
+            pos = (engine.player.x, engine.player.y)
+            if pos == engine.game_map.downstairs_location:
                 hint_text = "▼ Enter で次の階へ"
+            elif pos == engine.game_map.upstairs_location:
+                hint_text = ("▲ Enter で村へ戻る" if engine.current_floor <= 1
+                             else "▲ Enter で上の階へ")
             else:
                 foot = engine.item_under_player()
                 if foot is not None:

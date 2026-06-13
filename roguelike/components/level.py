@@ -18,6 +18,7 @@ class Level:
     """
 
     entity: "Entity"  # 所有者。Entity 側で設定される。
+    skills = None     # プレイヤーのスキルツリー（Entity 側で設定）。敵は None。
 
     def __init__(
         self,
@@ -47,4 +48,46 @@ class Level:
             self.current_xp -= self.experience_to_next_level
             self.current_level += 1
             gained += 1
+            if self.skills is not None:  # レベルアップでスキルポイント付与＆記録
+                self.skills.gain_level(self.current_level)
         return gained
+
+    def _xp_to_reach(self, level: int) -> int:
+        """level に上がるのに必要だった経験値（= level-1 の必要経験値）。"""
+        return self.level_up_base + (level - 1) * self.level_up_factor
+
+    def wealth(self) -> int:
+        """お金として使える総経験値。
+
+        このゲームではお金＝経験値。レベルに溜め込んだ分まで含め、
+        Lv.1・XP0 まで使い切れる総量を返す（買い物で減るとレベルダウンする）。
+        """
+        w = self.current_xp
+        for lv in range(2, self.current_level + 1):
+            w += self._xp_to_reach(lv)
+        return w
+
+    def spend_xp(self, amount: int, fighter=None) -> bool:
+        """経験値（お金）を amount 消費する。足りなければ False（買えない）。
+
+        current_xp が尽きたらレベルダウンし、その分のステータス上昇を巻き戻す。
+        Lv.1 を下回ることはない（wealth() で事前に判定）。
+        """
+        if amount <= 0:
+            return True
+        if self.wealth() < amount:
+            return False
+        from components.level import HP_PER_LEVEL, POWER_PER_LEVEL
+        start_level = self.current_level
+        self.current_xp -= amount
+        while self.current_xp < 0 and self.current_level > 1:
+            self.current_level -= 1
+            self.current_xp += self._xp_to_reach(self.current_level + 1)
+            if fighter is not None:                 # レベルダウン分のステータスを戻す
+                fighter.max_hp = max(1, fighter.max_hp - HP_PER_LEVEL)
+                fighter._hp = min(fighter._hp, fighter.max_hp)
+                fighter.base_power = max(1, fighter.base_power - POWER_PER_LEVEL)
+        if self.skills is not None and self.current_level < start_level:
+            # 下がった先のレベル時点のスキル構成へ戻す
+            self.skills.revert_to(self.current_level)
+        return True

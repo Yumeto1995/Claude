@@ -19,7 +19,9 @@ def animal_names_in(items):
 
 
 def place(engine, pen_index, animal_name):
-    husbandry.place(engine, engine.ranch_pens, pen_index, animal_name, ANIMALS, WHERE)
+    sk = getattr(engine.player, "skills", None)   # スキル『酪農』で産出が速く
+    speed = sk.growth_factor("ranch") if sk is not None else 1.0
+    husbandry.place(engine, engine.ranch_pens, pen_index, animal_name, ANIMALS, WHERE, speed)
 
 
 def collect(engine, pen_index):

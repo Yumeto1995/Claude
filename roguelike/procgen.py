@@ -173,11 +173,14 @@ def generate_dungeon(
         dungeon.tiles[new_room.inner] = tile_types.floor
 
         if len(rooms) == 0:
-            # 最初の部屋＝セーフルーム。プレイヤーを配置し、敵・階段は置かない。
+            # 最初の部屋＝セーフルーム。プレイヤーを配置し、敵は置かない。
+            # 中央に上り階段（前の階／村へ戻る）を置く。
             # 最初の部屋は接続上「行き止まり（葉）」なので、敵を締め出しても
             # 階層は分断されない。
             player.x, player.y = new_room.center
             dungeon.safe[new_room.inner] = True
+            dungeon.tiles[new_room.center] = tile_types.up_stairs
+            dungeon.upstairs_location = new_room.center
         else:
             # 直前の部屋と通路でつなぐ
             for x, y in tunnel_between(rooms[-1].center, new_room.center):
@@ -191,7 +194,9 @@ def generate_dungeon(
         # FOV 用に部屋の範囲を記録
         dungeon.rooms.append((new_room.x1, new_room.y1, new_room.x2, new_room.y2))
 
-    # 最後の部屋の中央に下り階段を置く
+    # 最後の部屋の中央に下り階段を置く（上り階段と重ならないよう保証）
+    if center_of_last_room == dungeon.upstairs_location and len(rooms) >= 2:
+        center_of_last_room = rooms[1].center
     dungeon.tiles[center_of_last_room] = tile_types.down_stairs
     dungeon.downstairs_location = center_of_last_room
 

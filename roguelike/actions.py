@@ -42,19 +42,13 @@ class WaitAction(Action):
         engine.message_log.add_message("その場で待機した。", colors.NO_EFFECT)
 
 
-class DescendAction(Action):
-    """下り階段の上で実行すると次の階へ降りる（ターンは別扱い）。"""
+class UseStairsAction(Action):
+    """足元の階段を使う：上り階段→前の階（1階なら村）、下り階段→次の階。"""
 
     consumes_turn = False
 
     def perform(self, engine: Engine, entity: Entity) -> None:
-        if (entity.x, entity.y) == engine.game_map.downstairs_location:
-            engine.generate_floor()
-            engine.message_log.add_message(
-                f"地下 {engine.current_floor} 階に降りた。", colors.DESCEND
-            )
-        else:
-            engine.message_log.add_message("ここには階段がない。", colors.NO_EFFECT)
+        engine.use_stairs()
 
 
 class ToggleAttackModeAction(Action):
@@ -220,6 +214,76 @@ class VillageInteractAction(Action):
         engine.village_interact()
 
 
+class BuildingLeaveAction(Action):
+    """建物から村へ戻る（ESC）。"""
+
+    consumes_turn = False
+
+    def perform(self, engine: Engine, entity: Entity) -> None:
+        engine.leave_building()
+
+
+class ShopMoveCursorAction(Action):
+    """店の選択カーソルを上下に動かす。"""
+
+    consumes_turn = False
+
+    def __init__(self, delta: int):
+        self.delta = delta
+
+    def perform(self, engine: Engine, entity: Entity) -> None:
+        engine.shop_move_cursor(self.delta)
+
+
+class ShopBuyAction(Action):
+    """店でカーソル位置の品を買う（代金＝経験値）。"""
+
+    consumes_turn = False
+
+    def perform(self, engine: Engine, entity: Entity) -> None:
+        engine.shop_buy()
+
+
+class ShopCloseAction(Action):
+    """店を閉じる。"""
+
+    consumes_turn = False
+
+    def perform(self, engine: Engine, entity: Entity) -> None:
+        engine.shop_close()
+
+
+class ToggleSkillTreeAction(Action):
+    """スキルツリー画面を開閉する。"""
+
+    consumes_turn = False
+
+    def perform(self, engine: Engine, entity: Entity) -> None:
+        engine.toggle_skill_tree()
+
+
+class SkillNavAction(Action):
+    """スキルツリーのカーソル移動（系統←→・段↑↓）。"""
+
+    consumes_turn = False
+
+    def __init__(self, dbranch: int, dtier: int):
+        self.dbranch = dbranch
+        self.dtier = dtier
+
+    def perform(self, engine: Engine, entity: Entity) -> None:
+        engine.skill_nav(self.dbranch, self.dtier)
+
+
+class SkillUnlockAction(Action):
+    """選択中のスキルノードを習得する。"""
+
+    consumes_turn = False
+
+    def perform(self, engine: Engine, entity: Entity) -> None:
+        engine.skill_unlock()
+
+
 class CloseDialogueAction(Action):
     """会話ウィンドウを閉じる。"""
 
@@ -302,9 +366,16 @@ class MeleeAction(ActionWithDirection):
         if target.fighter.is_hungry:
             damage = int(damage * HUNGER_DAMAGE_MULT)  # 空腹だと受けるダメージ増
         damage = max(1, damage)  # 命中すれば最低1ダメージ（防御で完全無効化しない）
+        # スキル『運』：会心の一撃（1.5倍）
+        crit = False
+        sk = getattr(entity, "skills", None)
+        if sk is not None and sk.roll(sk.crit_chance()):
+            damage = int(damage * 1.5)
+            crit = True
         attack_color = colors.PLAYER_ATK if entity is engine.player else colors.ENEMY_ATK
+        prefix = "会心の一撃！ " if crit else ""
         engine.message_log.add_message(
-            f"{entity.name} が {target.name} を攻撃 → {damage} ダメージ", attack_color
+            f"{prefix}{entity.name} が {target.name} を攻撃 → {damage} ダメージ", attack_color
         )
         # 被弾フラッシュ＋ダメージ数字（プレイヤーが受けたダメージは赤系で表示）
         engine.pending_fx.append(("flash", target))

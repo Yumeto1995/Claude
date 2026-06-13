@@ -78,8 +78,11 @@ def pot_summary(pot: List[str]) -> str:
 
 # ---- 調理 ----
 
-def compute_dish(pot: List[str], method: str) -> Dict:
-    """鍋の中身と調理法から、完成料理の効果を計算する。"""
+def compute_dish(pot: List[str], method: str, boost: float = 1.0) -> Dict:
+    """鍋の中身と調理法から、完成料理の効果を計算する。
+
+    boost はスキル『料理』による栄養（効果）の倍率（毒性は強めない）。
+    """
     mult = METHODS[method]
     n = len(pot)
     # 入れすぎ補正：4品以上から効果が薄まる
@@ -93,7 +96,7 @@ def compute_dish(pot: List[str], method: str) -> Dict:
             total[k] += prof.get(k, 0)
         tox += prof.get("tox", 0)
     for k in NUTRIENTS:
-        total[k] = total[k] * mult[k] * dilution
+        total[k] = total[k] * mult[k] * dilution * boost
     tox *= mult["tox"]
 
     satiety = int(total["carb"] * 1.4 + total["fat"] * 1.1)
@@ -146,7 +149,9 @@ def cook(engine: "Engine", pot: List[str], method: str) -> None:
                 inv.remove(it)
                 break
 
-    res = compute_dish(pot, method)
+    sk = getattr(engine.player, "skills", None)
+    boost = sk.cooking_mult() if sk is not None else 1.0
+    res = compute_dish(pot, method, boost)
 
     from components.consumable import FoodDishConsumable
     from entity import Entity

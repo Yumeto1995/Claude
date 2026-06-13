@@ -16,6 +16,9 @@ tile_dt = np.dtype(
 SPRITE_FLOOR = 0
 SPRITE_WALL = 1
 SPRITE_DOWNSTAIRS = 2
+SPRITE_DOOR = 3   # 村・建物のドア（歩いて入れる）
+SPRITE_TREE = 4   # 森の木（通れない）
+SPRITE_UPSTAIRS = 5  # 上り階段（前の階／村へ）
 
 
 def new_tile(
@@ -28,3 +31,6 @@ def new_tile(
 floor = new_tile(walkable=True, transparent=True, sprite=SPRITE_FLOOR)
 wall = new_tile(walkable=False, transparent=False, sprite=SPRITE_WALL)
 down_stairs = new_tile(walkable=True, transparent=True, sprite=SPRITE_DOWNSTAIRS)
+up_stairs = new_tile(walkable=True, transparent=True, sprite=SPRITE_UPSTAIRS)
+door = new_tile(walkable=True, transparent=True, sprite=SPRITE_DOOR)
+tree = new_tile(walkable=False, transparent=False, sprite=SPRITE_TREE)

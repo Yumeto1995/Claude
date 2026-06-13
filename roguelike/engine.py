@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Iterable
 
+import buildings
 import camp_map
 import colors
 import entity_factories
@@ -9,6 +10,7 @@ import farming
 import fishery
 import item_category
 import ranch
+import shop
 import village_map
 from actions import EscapeAction
 from fov import compute_fov
@@ -28,6 +30,10 @@ class Engine:
         self.inventory_open = False  # 持ち物メニューを開いているか
         self.inventory_category = 0  # 持ち物メニューで選択中の分類タブ
         self.inventory_cursor = 0    # 持ち物メニューで選択中の行（カーソル位置）
+        # スキルツリー画面の状態
+        self.skill_open = False
+        self.skill_branch = 0        # 選択中の系統（列）
+        self.skill_tier = 0          # 選択中の段（行）
         # 拠点（魔法のテント＝歩けるテント内マップ）の状態
         self.in_camp = False
         self.camp_menu = None        # None=拠点を歩いている / 文字列=設備メニュー表示中
@@ -57,30 +63,50 @@ class Engine:
         # 村（NPCのいる開始地点）の状態
         self.in_village = False
         self.dialogue = None
+        # 建物（家・店）の状態。in_village=True のまま建物内に切り替わる。
+        self.building_key = None     # None=屋外 / 建物キー=建物内
+        self.building_exit = None    # 建物内のドア座標（ここで Enter→村へ）
+        self.building_return = (0, 0)  # 村に戻るときの位置
+        self.shop_kind = None        # 開いている店の種別（None=閉じている）
+        self.shop_cursor = 0
+        # 潜入中のダンジョン各階を保持（上下移動で同じ階に戻れる）。
+        # 村に戻ると破棄され、次の潜入では新しいダンジョンになる。
+        self.floors = {}
         self.enter_village()  # ゲームは村から始まる
 
-    def generate_floor(self) -> None:
-        """次のフロアを生成する（プレイヤーのステータス・持ち物は引き継ぐ）。"""
-        self.current_floor += 1
-        # 深いほど敵が増える（上限あり）
-        max_monsters = min(2 + (self.current_floor - 1) // 2, 6)
-        # セーフルームでフロアが分断されない地形になるまで生成し直す
+    def _build_floor(self, floor: int) -> "GameMap":
+        """指定階のダンジョンを生成して返す（連結を検証）。"""
+        max_monsters = min(2 + (floor - 1) // 2, 6)  # 深いほど敵が増える
+        dungeon = None
         for _ in range(20):
             dungeon = generate_dungeon(
-                max_rooms=30,
-                room_min_size=6,
-                room_max_size=10,
-                map_width=self.width,
-                map_height=self.height,
-                max_monsters_per_room=max_monsters,
-                max_items_per_room=1,
-                player=self.player,
-                floor=self.current_floor,
+                max_rooms=30, room_min_size=6, room_max_size=10,
+                map_width=self.width, map_height=self.height,
+                max_monsters_per_room=max_monsters, max_items_per_room=1,
+                player=self.player, floor=floor,
             )
             if nonsafe_connected(dungeon):
                 break
-        self.game_map = dungeon
-        self.update_fov()   # 視界を計算
+        return dungeon
+
+    def go_to_floor(self, floor: int, arrive: str) -> None:
+        """floor 階へ移動する。arrive='up' なら上り階段、'down' なら下り階段に出る。
+
+        生成済みの階は保持されたものを再利用（敵・探索状況も維持）。
+        """
+        old = self.game_map
+        if old is not None and self.player in old.entities:
+            old.entities.remove(self.player)
+        if floor not in self.floors:
+            self.floors[floor] = self._build_floor(floor)
+        gm = self.floors[floor]
+        if self.player not in gm.entities:
+            gm.entities.append(self.player)
+        self.game_map = gm
+        self.current_floor = floor
+        loc = gm.upstairs_location if arrive == "up" else gm.downstairs_location
+        self.player.x, self.player.y = loc
+        self.update_fov()
 
     def handle_events(self, events: Iterable) -> None:
         for event in events:
@@ -146,29 +172,163 @@ class Engine:
         self.in_village = True
         self.in_camp = False
         self.dialogue = None
+        self.building_key = None
+        self.building_exit = None
+        self.shop_kind = None
         self.game_map = village_map.build_village_map()
         self.player.x, self.player.y = village_map.SPAWN
         self.game_map.entities.append(self.player)
 
     def enter_dungeon(self) -> None:
-        """村の入口からダンジョン1階へ。"""
+        """村の入口からダンジョン1階へ（新しいダンジョンを生成）。"""
         self.in_village = False
         self.dialogue = None
+        self.building_key = None
+        self.shop_kind = None
+        self.floors = {}        # 潜入のたびに新しいダンジョン
         self.current_floor = 0
-        self.generate_floor()  # 1階を生成（プレイヤー位置もここで決まる）
+        self.go_to_floor(1, "up")  # 1階の上り階段（セーフルーム）に出現
         self.message_log.add_message("ダンジョンに足を踏み入れた。", colors.WELCOME)
 
-    def village_interact(self) -> None:
-        """村で Enter：入口ならダンジョンへ、隣接NPCがいれば会話。"""
-        if (self.player.x, self.player.y) == village_map.DUNGEON_ENTRANCE:
-            self.enter_dungeon()
+    def use_stairs(self) -> None:
+        """足元の階段を使う。上り階段→前の階（1階なら村）、下り階段→次の階。"""
+        pos = (self.player.x, self.player.y)
+        if pos == self.game_map.upstairs_location:
+            self.ascend()
+        elif pos == self.game_map.downstairs_location:
+            self.descend()
+        else:
+            self.message_log.add_message("ここには階段がない。", colors.NO_EFFECT)
+
+    def descend(self) -> None:
+        self.go_to_floor(self.current_floor + 1, "up")
+        self.message_log.add_message(
+            f"地下 {self.current_floor} 階に降りた。", colors.DESCEND
+        )
+
+    def ascend(self) -> None:
+        if self.current_floor <= 1:
+            self.return_to_village()
             return
+        self.go_to_floor(self.current_floor - 1, "down")
+        self.message_log.add_message(
+            f"地下 {self.current_floor} 階に戻った。", colors.DESCEND
+        )
+
+    def return_to_village(self) -> None:
+        """ダンジョンから村へ帰還する（潜入中のダンジョンは破棄）。"""
+        if self.player in self.game_map.entities:
+            self.game_map.entities.remove(self.player)
+        self.floors = {}
+        self.enter_village()
+        self.player.x, self.player.y = village_map.DUNGEON_ENTRANCE  # 洞窟の前に出る
+        self.message_log.add_message("地上の村に戻ってきた。", colors.WELCOME)
+
+    def village_interact(self) -> None:
+        """村/建物内で Enter。屋外：洞窟→ダンジョン / ドア→建物 / 隣接NPC→会話。
+        建物内：出口ドア→村へ / 隣接店主→店 or 会話。"""
+        pos = (self.player.x, self.player.y)
+        if self.building_key is None:
+            # 屋外（村）
+            if pos == village_map.DUNGEON_ENTRANCE:
+                self.enter_dungeon()
+                return
+            if pos in village_map.DOORS:
+                self.enter_building(village_map.DOORS[pos])
+                return
+        else:
+            # 建物内：出口ドアで村へ
+            if pos == self.building_exit:
+                self.leave_building()
+                return
+        # 隣接エンティティ：店主なら店、それ以外は会話
         for ent in self.game_map.entities:
-            if getattr(ent, "dialogue", None) and max(
-                abs(ent.x - self.player.x), abs(ent.y - self.player.y)
-            ) == 1:
+            if ent is self.player:
+                continue
+            if max(abs(ent.x - self.player.x), abs(ent.y - self.player.y)) != 1:
+                continue
+            if getattr(ent, "shop", None):
+                self.open_shop(ent.shop)
+                return
+            if getattr(ent, "dialogue", None):
                 self.dialogue = {"name": ent.name, "lines": ent.dialogue}
                 return
+
+    # --- 建物（家・店）---
+    def enter_building(self, key: str) -> None:
+        """村のドアから建物内へ。村マップと位置を退避する。"""
+        self.village_outdoor_map = self.game_map
+        self.building_return = (self.player.x, self.player.y)
+        gm, entrance, exit_pos = buildings.build_interior(key)
+        self.game_map = gm
+        self.building_key = key
+        self.building_exit = exit_pos
+        self.player.x, self.player.y = entrance
+        gm.entities.append(self.player)
+        self.message_log.add_message(
+            f"{buildings.label(key)} に入った。", colors.WELCOME
+        )
+
+    def leave_building(self) -> None:
+        """建物から村へ戻る。"""
+        if self.player in self.game_map.entities:
+            self.game_map.entities.remove(self.player)
+        self.game_map = self.village_outdoor_map
+        self.player.x, self.player.y = self.building_return
+        self.building_key = None
+        self.building_exit = None
+        self.shop_kind = None
+
+    # --- 店（買い物。代金＝経験値）---
+    def open_shop(self, kind: str) -> None:
+        self.shop_kind = kind
+        self.shop_cursor = 0
+
+    def shop_move_cursor(self, delta: int) -> None:
+        n = len(shop.options(self, self.shop_kind))
+        if n:
+            self.shop_cursor = (self.shop_cursor + delta) % n
+
+    def shop_buy(self) -> None:
+        opts = shop.options(self, self.shop_kind)
+        if not opts:
+            return
+        cur = opts[min(self.shop_cursor, len(opts) - 1)]
+        if cur.get("enabled", True):
+            shop.buy(self, self.shop_kind, cur["index"])
+
+    def shop_close(self) -> None:
+        self.shop_kind = None
+
+    # --- スキルツリー ---
+    def toggle_skill_tree(self) -> None:
+        self.skill_open = not self.skill_open
+
+    def skill_nav(self, dbranch: int, dtier: int) -> None:
+        import skills
+        self.skill_branch = (self.skill_branch + dbranch) % len(skills.BRANCH_KEYS)
+        self.skill_tier = max(0, min(skills.TIERS - 1, self.skill_tier + dtier))
+
+    def skill_unlock(self) -> None:
+        import skills
+        sk = self.player.skills
+        if sk is None:
+            return
+        branch = skills.BRANCH_KEYS[self.skill_branch]
+        tier = self.skill_tier
+        name = skills.node_name(branch, tier)
+        if sk.unlock(branch, tier, self.player.level.current_level):
+            self.message_log.add_message(
+                f"スキル『{name}』を習得した！", colors.LEVEL_UP
+            )
+        elif sk.is_unlocked(branch, tier):
+            self.message_log.add_message(f"『{name}』は習得済み。", colors.NO_EFFECT)
+        elif sk.points < 1:
+            self.message_log.add_message("スキルポイントが足りない。", colors.NO_EFFECT)
+        else:
+            self.message_log.add_message(
+                f"先に『{skills.node_name(branch, tier - 1)}』が必要。", colors.NO_EFFECT
+            )
 
     def enter_camp(self) -> None:
         """ダンジョンを退避して、歩けるテント内マップに切り替える。"""

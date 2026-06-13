@@ -62,6 +62,9 @@ class Fighter:
         total = eq.defense_bonus if eq is not None else 0
         for s in getattr(self.entity, "status_effects", []):
             total += s.defense_bonus
+        sk = getattr(self.entity, "skills", None)   # スキル『防御』
+        if sk is not None:
+            total += sk.defense_bonus
         return total
 
     @property
@@ -70,6 +73,9 @@ class Fighter:
         total = eq.power_bonus if eq is not None else 0
         for s in getattr(self.entity, "status_effects", []):
             total += s.power_bonus
+        sk = getattr(self.entity, "skills", None)   # スキル『攻撃』
+        if sk is not None:
+            total += sk.power_bonus
         return total
 
     @property

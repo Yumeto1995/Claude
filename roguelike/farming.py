@@ -54,6 +54,9 @@ def plant(engine: "Engine", seed_name: str, plot_index: int) -> None:
             inv.remove(it)
             break
     output, steps = SEEDS[seed_name]
+    sk = getattr(engine.player, "skills", None)   # スキル『農業』で成長が速く
+    if sk is not None:
+        steps = max(1, int(steps * sk.growth_factor("farming")))
     engine.farm_plots[plot_index] = {
         "name": output.name, "template": output, "steps_left": steps,
     }

@@ -1,7 +1,8 @@
-"""ゲーム開始の村マップ。歩いてNPCに話しかけ、北の入口からダンジョンへ。
+"""ゲーム開始の村マップ：森の外れの寂れた村。
 
-camp_map と同じく、ダンジョンとは別の小さな GameMap。NPC はダイアログを持つ
-ブロッキングなエンティティとして配置する。
+草地に木造の建物（道具屋・武器防具屋・食料品店・民家）が建ち、まわりを森が囲む。
+建物の**ドア**の上で Enter を押すと、別マップ（建物内）に入れる（buildings.py）。
+北の**洞窟**（ダンジョン入口）から地下へ。
 """
 from __future__ import annotations
 
@@ -9,42 +10,77 @@ import tile_types
 from entity import Entity
 from game_map import GameMap
 
-VW, VH = 24, 17
-SPAWN = (12, 11)            # プレイヤーの初期位置
-DUNGEON_ENTRANCE = (12, 2)  # 北の洞窟（ダンジョン入口）
+VW, VH = 30, 20
+SPAWN = (15, 11)            # プレイヤーの初期位置（広場の中央）
+DUNGEON_ENTRANCE = (15, 3)  # 北の洞窟（ダンジョン入口）
 
+# ドアタイル (x, y) → 入れる建物のキー（buildings.BUILDINGS と対応）
+DOORS = {
+    (6, 9): "item",
+    (14, 9): "weapon",
+    (22, 9): "food",
+    (12, 16): "house",
+}
+
+# 看板・地名（text, x, y）
 LABELS = [
-    ("▲ ダンジョン入口", 8, 1),
-    ("村", 2, 14),
+    ("▲ 洞窟（ダンジョン）", 11, 2),
+    ("道具屋", 4, 5),
+    ("武器・防具屋", 11, 5),
+    ("食料品店", 20, 5),
+    ("民家", 10, 12),
+    ("～ 森の外れの寂れた村 ～", 2, 18),
 ]
 
-# NPC：(x, y, 名前, セリフ行...)
+# 村人（x, y, 名前, セリフ…）。寂れた雰囲気のフレーバー。
 NPC_DEFS = [
-    (10, 5, "村長", [
-        "ようこそ、辺境の村へ。",
-        "北の洞窟から魔物があふれ出ておる。",
-        "君のような冒険者だけが頼りなのじゃ。",
+    (16, 10, "村長", [
+        "ようこそ、こんな辺鄙な村へ。",
+        "若い者は皆出ていき、残ったのは年寄りばかりでな。",
+        "北の洞窟の魔物を鎮めてくれれば、村もまた賑わうだろう。",
     ]),
-    (4, 8, "道具屋のおやじ", [
-        "いらっしゃい！…と言いたいが、まだ開店準備中でな。",
-        "そのうち武器や薬を並べるさ。楽しみにな。",
+    (9, 13, "村の子供", [
+        "おにいちゃん、つよい？",
+        "お店の人たちね、ぼうけんしゃにはやさしいんだって。",
     ]),
-    (19, 8, "教官", [
-        "戦いの心得を教えよう。",
-        "セーフルームに魔物は入れん。『魔法のテント』を張れば",
-        "料理・畑・牧場・漁業ができるぞ。空腹には気をつけてな。",
-    ]),
-    (15, 12, "村の子供", [
-        "おにいちゃん、ダンジョンって こわい？",
-        "モンスターがいっぱいいるんだって！",
+    (24, 13, "年老いた旅人", [
+        "わしも昔は冒険者じゃった。",
+        "金が要るなら経験を売るがいい…ただし、力は少し鈍るがの。",
     ]),
 ]
+
+
+def _stamp_building(gm: GameMap, x1: int, y1: int, x2: int, y2: int, door: tuple) -> None:
+    """(x1,y1)-(x2,y2) を木の壁で塗り、door の位置だけドアにする。"""
+    for y in range(y1, y2 + 1):
+        for x in range(x1, x2 + 1):
+            gm.tiles[x, y] = tile_types.wall  # 描画側で wood_wall に割り当て
+    gm.tiles[door] = tile_types.door
 
 
 def build_village_map() -> GameMap:
     gm = GameMap(VW, VH)
-    gm.tiles[1 : VW - 1, 1 : VH - 1] = tile_types.floor  # 広場（オープン）
-    gm.tiles[DUNGEON_ENTRANCE] = tile_types.down_stairs   # 入口は階段スプライト
+    # 一面を草地に
+    gm.tiles[:, :] = tile_types.floor
+    # まわりを森（木）で囲う。上側は2列にして深い森に。
+    gm.tiles[0, :] = tile_types.tree
+    gm.tiles[VW - 1, :] = tile_types.tree
+    gm.tiles[:, 0] = tile_types.tree
+    gm.tiles[:, VH - 1] = tile_types.tree
+    gm.tiles[:, 1] = tile_types.tree
+    # 散在する木（寂れた森の外れ感）
+    for x, y in [(3, 3), (27, 3), (2, 9), (27, 10), (5, 16), (26, 16), (19, 14)]:
+        gm.tiles[x, y] = tile_types.tree
+
+    # 建物（道具屋・武器防具屋・食料品店・民家）
+    _stamp_building(gm, 4, 6, 8, 9, (6, 9))
+    _stamp_building(gm, 12, 6, 16, 9, (14, 9))
+    _stamp_building(gm, 20, 6, 24, 9, (22, 9))
+    _stamp_building(gm, 10, 13, 14, 16, (12, 16))
+
+    # 洞窟（ダンジョン入口）。周囲の木を少し開けて洞口に
+    gm.tiles[DUNGEON_ENTRANCE] = tile_types.down_stairs
+
     gm.visible[:, :] = True
     gm.explored[:, :] = True
     gm.safe[:, :] = False

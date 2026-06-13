@@ -36,6 +36,7 @@ class Entity:
         equippable: Optional["Equippable"] = None,
         equipment: Optional["Equipment"] = None,
         item_category: Optional["ItemCategory"] = None,
+        skills=None,
         dialogue=None,
     ):
         self.x = x
@@ -54,6 +55,12 @@ class Entity:
         self.level = level
         if self.level is not None:
             self.level.entity = self
+        # スキルツリー（プレイヤーのみ）。Level と連携してレベル増減で習得/巻戻し。
+        self.skills = skills
+        if self.skills is not None:
+            self.skills.entity = self
+            if self.level is not None:
+                self.level.skills = self.skills
         # アイテム用：使用効果。プレイヤー用：持ち物。
         self.consumable = consumable
         if self.consumable is not None:

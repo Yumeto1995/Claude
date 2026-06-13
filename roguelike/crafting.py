@@ -54,3 +54,8 @@ def try_craft(engine: "Engine", recipe: Recipe) -> None:
                 removed += 1
     inv.items.append(recipe.output.spawn(0, 0))
     engine.message_log.add_message(f"{recipe.output_name} を作った！", colors.ITEM)
+    # スキル『錬金』：一定確率でおまけがもう1つ
+    sk = getattr(engine.player, "skills", None)
+    if sk is not None and sk.roll(sk.alchemy_bonus_chance()) and len(inv.items) < inv.capacity:
+        inv.items.append(recipe.output.spawn(0, 0))
+        engine.message_log.add_message(f"錬金の妙！ {recipe.output_name} がもう1つできた。", colors.LEVEL_UP)

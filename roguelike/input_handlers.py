@@ -13,17 +13,24 @@ from actions import (
     CampLeaveAction,
     CampMoveCursorAction,
     CampSelectAction,
+    BuildingLeaveAction,
     CloseDialogueAction,
     CycleInventoryCategoryAction,
-    DescendAction,
     EscapeAction,
     MeleeAction,
     MoveInventoryCursorAction,
     MovementAction,
     PickupAction,
+    ShopBuyAction,
+    ShopCloseAction,
+    ShopMoveCursorAction,
+    SkillNavAction,
+    SkillUnlockAction,
     ToggleAttackModeAction,
     ToggleInventoryAction,
+    ToggleSkillTreeAction,
     UseItemAction,
+    UseStairsAction,
     VillageInteractAction,
     WaitAction,
 )
@@ -58,16 +65,35 @@ def dispatch_event(event: pygame.event.Event, engine: "Engine") -> Optional[Acti
     if event.type == pygame.KEYDOWN:
         key = event.key
 
-        # 村にいる間は専用の操作
+        # スキルツリー画面（村・ダンジョンどちらからでも開ける全画面メニュー）
+        if getattr(engine, "skill_open", False):
+            return _skill_keys(key)
+
+        # 村・建物内にいる間は専用の操作
         if getattr(engine, "in_village", False):
+            # 店（買い物）メニュー中
+            if getattr(engine, "shop_kind", None) is not None:
+                if key in (pygame.K_UP, pygame.K_w, pygame.K_k):
+                    return ShopMoveCursorAction(-1)
+                if key in (pygame.K_DOWN, pygame.K_s, pygame.K_j):
+                    return ShopMoveCursorAction(1)
+                if key in (pygame.K_RETURN, pygame.K_KP_ENTER):
+                    return ShopBuyAction()
+                if key == pygame.K_ESCAPE:
+                    return ShopCloseAction()
+                return None
             if getattr(engine, "dialogue", None) is not None:
                 if key in (pygame.K_RETURN, pygame.K_KP_ENTER, pygame.K_ESCAPE):
                     return CloseDialogueAction()
                 return None
             if key in (pygame.K_RETURN, pygame.K_KP_ENTER):
-                return VillageInteractAction()  # 入口→ダンジョン / NPC→会話
+                return VillageInteractAction()  # 洞窟→ダンジョン / ドア→建物 / 店主→店 / NPC→会話
+            if key == pygame.K_t:
+                return ToggleSkillTreeAction()   # スキルツリー
             if key == pygame.K_ESCAPE:
-                return EscapeAction()  # タイトルへ
+                if getattr(engine, "building_key", None) is not None:
+                    return BuildingLeaveAction()  # 建物内→村へ
+                return EscapeAction()  # 屋外→タイトルへ
             return None  # 方向キーはポーリングで移動
 
         # 拠点（テント内）にいる間は専用の操作
@@ -90,9 +116,9 @@ def dispatch_event(event: pygame.event.Event, engine: "Engine") -> Optional[Acti
             dx, dy = _DIRECTIONS[key]
             return MeleeAction(dx, dy)
 
-        # 階段で次の階へ（Enter または > キー）
-        if event.unicode == ">" or key in (pygame.K_RETURN, pygame.K_KP_ENTER):
-            return DescendAction()
+        # 階段の昇降（Enter＝足元の階段を使う / > 下り / < 上り。どれも足元の階段で作用）
+        if event.unicode in (">", "<") or key in (pygame.K_RETURN, pygame.K_KP_ENTER):
+            return UseStairsAction()
         if key == pygame.K_g:
             return PickupAction()               # 足元のアイテムを拾う
         if key == pygame.K_z:
@@ -101,9 +127,28 @@ def dispatch_event(event: pygame.event.Event, engine: "Engine") -> Optional[Acti
             return ToggleAttackModeAction()      # 攻撃/移動モード切替
         if key == pygame.K_i:
             return ToggleInventoryAction()       # 持ち物を開く
+        if key == pygame.K_t:
+            return ToggleSkillTreeAction()       # スキルツリー
         if key == pygame.K_ESCAPE:
             return EscapeAction()
 
+    return None
+
+
+def _skill_keys(key: int) -> Optional[Action]:
+    """スキルツリー画面のキー操作。←→で系統、↑↓で段、Enterで習得、t/ESCで閉じる。"""
+    if key in (pygame.K_LEFT, pygame.K_a, pygame.K_h):
+        return SkillNavAction(-1, 0)
+    if key in (pygame.K_RIGHT, pygame.K_d, pygame.K_l):
+        return SkillNavAction(1, 0)
+    if key in (pygame.K_UP, pygame.K_w, pygame.K_k):
+        return SkillNavAction(0, -1)
+    if key in (pygame.K_DOWN, pygame.K_s, pygame.K_j):
+        return SkillNavAction(0, 1)
+    if key in (pygame.K_RETURN, pygame.K_KP_ENTER):
+        return SkillUnlockAction()
+    if key in (pygame.K_t, pygame.K_ESCAPE):
+        return ToggleSkillTreeAction()
     return None
 
 
@@ -148,15 +193,16 @@ def held_movement_action(engine: "Engine") -> Optional[Action]:
 
     メインループがクールダウンを挟みつつ毎フレーム呼ぶことで連続移動になる。
     """
-    if engine.game_over:
+    if engine.game_over or getattr(engine, "skill_open", False):
         return None
     non_combat = engine.in_camp or getattr(engine, "in_village", False)
     if engine.in_camp:
         if engine.camp_menu is not None:
             return None  # 設備メニュー中は歩けない
     elif getattr(engine, "in_village", False):
-        if getattr(engine, "dialogue", None) is not None:
-            return None  # 会話中は歩けない
+        if (getattr(engine, "dialogue", None) is not None
+                or getattr(engine, "shop_kind", None) is not None):
+            return None  # 会話中・買い物中は歩けない
     elif engine.attack_mode or engine.inventory_open:
         return None
     # 押されている方向キーを合成（↑＋→ などで斜め移動）

@@ -35,8 +35,13 @@ def fish(engine):
         engine.message_log.add_message("エサがない。錬金で作れる。", colors.NO_EFFECT)
         return
     inv.remove(bait)
-    pool = random.choices(FISH_POOL, weights=[w for *_, w in FISH_POOL])[0]
-    template, name, _ = pool
+    # スキル『漁業』：ハズレ(ゴミ)の重みを減らし、良い魚が出やすくなる
+    sk = getattr(engine.player, "skills", None)
+    rank = sk.rank("fishery") if sk is not None else 0
+    weights = []
+    for tmpl, _name, w in FISH_POOL:
+        weights.append(max(1, w - rank * 6) if tmpl is None else w + rank * 3)
+    template, name, _ = random.choices(FISH_POOL, weights=weights)[0]
     if template is None:
         engine.message_log.add_message("ゴミが釣れた…", colors.NO_EFFECT)
         return
@@ -51,7 +56,9 @@ def breed_names_in(items):
 
 
 def place(engine, tank_index, fish_name):
-    husbandry.place(engine, engine.fishery_tanks, tank_index, fish_name, BREED, WHERE)
+    sk = getattr(engine.player, "skills", None)   # スキル『漁業』で養殖が速く
+    speed = sk.growth_factor("fishery") if sk is not None else 1.0
+    husbandry.place(engine, engine.fishery_tanks, tank_index, fish_name, BREED, WHERE, speed)
 
 
 def collect(engine, tank_index):

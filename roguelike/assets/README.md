@@ -29,7 +29,7 @@ UIには **PixelMplus**（8bit風の日本語TrueTypeフォント）を同梱し
 （無ければ静止画像のままなめらかにスライド）。`<キー>_attack.png` があれば攻撃中だけ差し替わる。
 これらは `gen_sprites.py` が player/npc/goblin/slime について自動生成する。
 
-## 必要なファイル一覧（全31種）
+## 必要なファイル一覧
 
 > Claude Chat で生成する場合のプロンプト集：[PROMPTS.md](PROMPTS.md)
 
@@ -46,13 +46,29 @@ cd assets && python3 gen_sprites.py   # 5枚を assets 直下に再生成
 （`*_walk1`/`*_walk2`）も同時に出力する。手描きPNGに差し替えたい場合は
 そのまま上書きすればよい（このスクリプトを再実行しなければ消えない）。
 
+## ダンジョン地形の再生成（gen_tiles.py）
+
+ダンジョンの床/壁は**階層テーマ別**（浅層=洞窟 `cave` / 深層=石 `stone`）で、
+**`gen_tiles.py`** が下地テクスチャを生成する：
+
+```bash
+cd assets && python3 gen_tiles.py   # cave_/stone_ の floor/wall/safe_floor を再生成
+```
+
+壁は隣接状況を見て**床に面した側だけ縁取り**し（壁同士の辺は描かない＝塊が連結して見える）、
+床は壁際に影を落とす。この向き別の縁取り・影は `graphics.py` が下地に重ねて描く（オートタイル）ので、
+追加の向き別PNGは不要。色を変えるときは `gen_tiles.py` の `PALETTES` を編集する。
+浅層/深層の境目は `graphics.py` の `Renderer.CAVE_MAX_FLOOR`（既定3階まで洞窟）。
+
 ### 背景（地形）
 | ファイル | 用途 |
 |----------|------|
-| `floor.png` | 床 |
-| `safe_floor.png` | セーフルームの床 |
-| `wall.png` | 壁 |
-| `stairs_down.png` | 下り階段 |
+| `cave_floor.png` / `cave_wall.png` / `cave_safe_floor.png` | 洞窟テーマ（浅層）の下地 |
+| `stone_floor.png` / `stone_wall.png` / `stone_safe_floor.png` | 石テーマ（深層）の下地 |
+| `stairs_down.png` / `stairs_up.png` | 下り階段（▼寒色）・上り階段（▲暖色）。村の洞窟入口は下り |
+| `grass.png` / `tree.png` / `door.png` | 村：草地・森の木・ドア（`gen_tiles.py` が生成） |
+| `wood_wall.png` / `wood_floor.png` | 村の建物・建物内の壁/床（同上） |
+| `floor.png` / `safe_floor.png` / `wall.png` | 拠点（テント内）で使う汎用の床/壁 |
 
 ### キャラクター
 | ファイル | 用途 |

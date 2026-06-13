@@ -21,13 +21,14 @@ def names_in(items, table) -> List[str]:
     return seen
 
 
-def place(engine, slots, idx, name, table, where_label) -> None:
+def place(engine, slots, idx, name, table, where_label, speed: float = 1.0) -> None:
     inv = engine.player.inventory.items
     for it in inv:
         if it.name == name:
             inv.remove(it)
             break
     product, interval = table[name]
+    interval = max(1, int(interval * speed))   # スキル『酪農/漁業』で産出が速く
     slots[idx] = {
         "src": name, "product_name": product.name, "product": product,
         "steps_left": interval, "interval": interval,

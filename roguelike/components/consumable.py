@@ -156,10 +156,12 @@ class LightningConsumable(Consumable):
         if target is None:
             engine.message_log.add_message("近くに敵がいない。", colors.NO_EFFECT)
             return False
+        sk = getattr(consumer, "skills", None)        # スキル『魔法』で威力上昇
+        damage = int(self.damage * sk.magic_mult()) if sk is not None else self.damage
         engine.message_log.add_message(
-            f"雷が {target.name} を撃った！ {self.damage} ダメージ。", colors.SCROLL
+            f"雷が {target.name} を撃った！ {damage} ダメージ。", colors.SCROLL
         )
-        combat.inflict_damage(engine, target, self.damage, attacker=consumer)
+        combat.inflict_damage(engine, target, damage, attacker=consumer)
         return True
 
 
@@ -176,8 +178,10 @@ class ConfusionConsumable(Consumable):
         if target is None:
             engine.message_log.add_message("近くに敵がいない。", colors.NO_EFFECT)
             return False
+        sk = getattr(consumer, "skills", None)        # スキル『魔法』で効果ターン延長
+        turns = int(self.turns * sk.magic_mult()) if sk is not None else self.turns
         engine.message_log.add_message(
             f"{target.name} は混乱して よろめき始めた！", colors.SCROLL
         )
-        target.ai = ConfusedEnemy(target, previous_ai=target.ai, turns=self.turns)
+        target.ai = ConfusedEnemy(target, previous_ai=target.ai, turns=turns)
         return True
