@@ -66,6 +66,59 @@ class MoveAnim:
         ox = -self.dx * TILE_SIZE * ease
         oy = -self.dy * TILE_SIZE * ease - math.sin(t * math.pi) * self.HOP
         return (ox, oy)
+
+
+class _TimedFx:
+    """寿命付き視覚エフェクトの共通基底。progress() が 0→1、終了で None。"""
+
+    DURATION = 0.2
+
+    def __init__(self):
+        self.start = time.time()
+
+    def progress(self):
+        t = (time.time() - self.start) / self.DURATION
+        return None if t >= 1.0 else t
+
+
+class SlashAnim(_TimedFx):
+    """攻撃先タイルを白い斬撃線が走り抜けるエフェクト。"""
+
+    DURATION = 0.16
+
+    def __init__(self, x: int, y: int, dx: int, dy: int):
+        super().__init__()
+        self.x = x
+        self.y = y
+        norm = math.hypot(dx, dy) or 1.0
+        self.ux, self.uy = dx / norm, dy / norm  # 攻撃方向の単位ベクトル
+
+
+class FlashAnim(_TimedFx):
+    """被弾したエンティティが一瞬白く光るエフェクト。"""
+
+    DURATION = 0.15
+
+    def __init__(self, entity):
+        super().__init__()
+        self.entity = entity
+
+
+class PopupAnim(_TimedFx):
+    """ダメージ数字がふわっと浮かんで消えるエフェクト。"""
+
+    DURATION = 0.6
+    RISE = 18  # 浮き上がる高さ(px)
+
+    def __init__(self, x: int, y: int, text: str, color: tuple):
+        super().__init__()
+        self.x = x
+        self.y = y
+        self.text = text
+        self.color = color
+        self.surf = None  # 初回描画時にレンダリングしてキャッシュ
+
+
 ASSETS_DIR = os.path.join(os.path.dirname(__file__), "assets")
 
 # スプライトのキー → 仮タイルの色（assets に PNG が無いとき使う）
@@ -138,7 +191,11 @@ def _make_placeholder(key: str) -> pygame.Surface:
 
 
 def load_sprites() -> Dict[str, pygame.Surface]:
-    """全スプライトを読み込む。PNG が無ければ仮タイルで代用。"""
+    """全スプライトを読み込む。PNG が無ければ仮タイルで代用。
+
+    `<キー>_attack.png` があれば攻撃ポーズとして追加で読み込む
+    （攻撃モーション中だけ自動で差し替わる。無ければ通常画像のまま）。
+    """
     sprites: Dict[str, pygame.Surface] = {}
     for key in PLACEHOLDER_COLORS:
         path = os.path.join(ASSETS_DIR, f"{key}.png")
@@ -148,6 +205,10 @@ def load_sprites() -> Dict[str, pygame.Surface]:
             sprites[key] = img
         else:
             sprites[key] = _make_placeholder(key)
+        attack_path = os.path.join(ASSETS_DIR, f"{key}_attack.png")
+        if os.path.exists(attack_path):
+            img = pygame.image.load(attack_path).convert_alpha()
+            sprites[f"{key}_attack"] = pygame.transform.scale(img, (TILE_SIZE, TILE_SIZE))
     return sprites
 
 
@@ -177,6 +238,9 @@ class Renderer:
         self.font = load_font(22)        # HP・ログ用
         self.big_font = load_font(48)    # ゲームオーバー用
         self.anims = []                  # 再生中のモーション（攻撃・歩行）
+        self.fx = []                     # 再生中のエフェクト（斬撃・フラッシュ・数字）
+        self.flash = {}                  # id(entity) → 被弾フラッシュの強度(0〜1)
+        self.attacking = set()           # 攻撃モーション再生中のエンティティ id
 
     CONTROLS = [
         "移動：矢印 / WASD / vi(hjkl,yubn) / テンキー（斜めも・2方向同時押し可）",
@@ -274,9 +338,19 @@ class Renderer:
                 continue
             ex, ey = entity.x - cam_x, entity.y - cam_y
             if 0 <= ex < self.view_w and 0 <= ey < self.view_h:
-                sprite = self.sprites.get(entity.sprite, self.sprites["player"])
+                key = entity.sprite
+                # 攻撃モーション中、攻撃ポーズ画像があれば差し替える
+                if id(entity) in self.attacking and f"{key}_attack" in self.sprites:
+                    key = f"{key}_attack"
+                sprite = self.sprites.get(key, self.sprites["player"])
+                flash = self.flash.get(id(entity), 0.0)
+                if flash > 0.0:
+                    sprite = self._whiten(sprite, flash)  # 被弾フラッシュ
                 ox, oy = offsets.get(id(entity), (0, 0))
                 screen.blit(sprite, (ex * TILE_SIZE + ox, ey * TILE_SIZE + oy))
+
+        # 斬撃・ダメージ数字はエンティティの上に重ねる
+        self._draw_fx(engine, cam_x, cam_y)
 
         # セーフルームにいるときは画面右上に表示
         if engine.game_map.safe[engine.player.x, engine.player.y]:
@@ -497,7 +571,7 @@ class Renderer:
 
         # 操作ヒント
         hint = self.font.render(
-            "←→：分類切替   a〜：使用/装備   i：閉じる", True, (150, 150, 160)
+            "←→：分類切替   ↑↓：選択   Enter：使用/装備   i：閉じる", True, (150, 150, 160)
         )
         screen.blit(hint, (x + 14, y + 10 + self.LINE_HEIGHT))
 
@@ -509,14 +583,25 @@ class Renderer:
             )
             return
         equipment = engine.player.equipment
+        cursor = min(engine.inventory_cursor, len(items) - 1)
         for i, item in enumerate(items):
-            letter = chr(ord("a") + i)
+            row_y = list_y + i * self.LINE_HEIGHT
             stat = self._equippable_stat_text(item)
             mark = "  [装備中]" if equipment.item_is_equipped(item) else ""
+            if i == cursor:
+                # カーソル行：背景を明るくして ▶ を付ける
+                pygame.draw.rect(
+                    screen, (55, 55, 90),
+                    (x + 8, row_y - 2, width - 16, self.LINE_HEIGHT),
+                )
+                text_color = (255, 255, 200)
+            else:
+                text_color = (230, 230, 230)
+            prefix = "▶ " if i == cursor else "   "
             line = self.font.render(
-                f"{letter}) {item.name}{stat}{mark}", True, (230, 230, 230)
+                f"{prefix}{item.name}{stat}{mark}", True, text_color
             )
-            screen.blit(line, (x + 18, list_y + i * self.LINE_HEIGHT))
+            screen.blit(line, (x + 18, row_y))
 
     @staticmethod
     def _equippable_stat_text(item) -> str:
@@ -538,6 +623,14 @@ class Renderer:
         return "  (" + " ".join(parts) + ")" if parts else ""
 
     @staticmethod
+    def _whiten(surf: pygame.Surface, intensity: float) -> pygame.Surface:
+        """スプライトを白寄りに光らせたコピーを返す（被弾フラッシュ用）。"""
+        bright = surf.copy()
+        v = int(200 * intensity)
+        bright.fill((v, v, v), special_flags=pygame.BLEND_RGB_ADD)
+        return bright
+
+    @staticmethod
     def _darken(surf: pygame.Surface) -> pygame.Surface:
         """スプライトを暗くしたコピーを返す（探索済みタイルの記憶表示用）。"""
         dark = surf.copy()
@@ -545,23 +638,95 @@ class Renderer:
         return dark
 
     def _update_animations(self, engine: "Engine") -> Dict[int, tuple]:
-        """engine の予約（攻撃・歩行）を取り込み、オフセットを集計して返す。"""
+        """engine の予約（攻撃・歩行・エフェクト）を取り込み、オフセットを集計して返す。
+
+        被弾フラッシュの強度は self.flash に集計する（エンティティ描画時に参照）。
+        """
         for entity, dx, dy in engine.drain_animations():
             self.anims.append(AttackAnim(entity, dx, dy))
         for entity, dx, dy in engine.drain_moves():
             self.anims.append(MoveAnim(entity, dx, dy))
+        for fx in engine.drain_fx():
+            kind = fx[0]
+            if kind == "slash":
+                self.fx.append(SlashAnim(*fx[1:]))
+            elif kind == "flash":
+                self.fx.append(FlashAnim(fx[1]))
+            elif kind == "popup":
+                self.fx.append(PopupAnim(*fx[1:]))
 
         offsets: Dict[int, tuple] = {}
         active = []
+        self.attacking = set()  # 攻撃モーション再生中のエンティティ（ポーズ差替用）
         for anim in self.anims:
             off = anim.offset()
             if off is None:
                 continue  # 再生終了
             active.append(anim)
+            if isinstance(anim, AttackAnim):
+                self.attacking.add(id(anim.entity))
             ox, oy = offsets.get(id(anim.entity), (0.0, 0.0))
             offsets[id(anim.entity)] = (ox + off[0], oy + off[1])
         self.anims = active
+
+        # エフェクトの寿命管理と被弾フラッシュ強度の集計
+        self.flash = {}
+        active_fx = []
+        for fx in self.fx:
+            t = fx.progress()
+            if t is None:
+                continue  # 再生終了
+            active_fx.append(fx)
+            if isinstance(fx, FlashAnim):
+                self.flash[id(fx.entity)] = 1.0 - t  # 当たった瞬間が最も白い
+        self.fx = active_fx
         return offsets
+
+    def _draw_fx(self, engine: "Engine", cam_x: int, cam_y: int) -> None:
+        """斬撃・ダメージ数字をエンティティの上に重ねて描く。"""
+        gm = engine.game_map
+        for fx in self.fx:
+            if isinstance(fx, FlashAnim):
+                continue  # フラッシュはエンティティ描画時に反映済み
+            t = fx.progress()
+            if t is None:
+                continue
+            if not gm.in_bounds(fx.x, fx.y) or not gm.visible[fx.x, fx.y]:
+                continue  # 視界外の戦闘（同士討ち等）は描かない
+            sx = (fx.x - cam_x) * TILE_SIZE
+            sy = (fx.y - cam_y) * TILE_SIZE
+            if isinstance(fx, SlashAnim):
+                self._draw_slash(fx, t, sx, sy)
+            elif isinstance(fx, PopupAnim):
+                self._draw_popup(fx, t, sx, sy)
+
+    def _draw_slash(self, fx: SlashAnim, t: float, sx: int, sy: int) -> None:
+        """攻撃方向と垂直な白い線が、タイルを手前から奥へ走り抜ける。"""
+        surf = pygame.Surface((TILE_SIZE, TILE_SIZE), pygame.SRCALPHA)
+        # 線の中心：攻撃方向に沿って手前→奥へ移動
+        shift = (t - 0.5) * TILE_SIZE * 0.7
+        mx = TILE_SIZE / 2 + fx.ux * shift
+        my = TILE_SIZE / 2 + fx.uy * shift
+        # 線の向き：攻撃方向に垂直。進むにつれ少し短くなる
+        px, py = -fx.uy, fx.ux
+        half = TILE_SIZE * 0.42 * (1.0 - 0.3 * t)
+        alpha = int(230 * (1.0 - t))
+        pygame.draw.line(
+            surf, (255, 255, 255, alpha),
+            (mx - px * half, my - py * half), (mx + px * half, my + py * half), 3,
+        )
+        self.screen.blit(surf, (sx, sy))
+
+    def _draw_popup(self, fx: PopupAnim, t: float, sx: int, sy: int) -> None:
+        """ダメージ数字：タイル上端から浮き上がり、後半でフェードアウト。"""
+        if fx.surf is None:
+            fx.surf = self.font.render(fx.text, True, fx.color)
+        label = fx.surf
+        if t > 0.5:
+            label.set_alpha(int(255 * (1.0 - t) * 2))
+        x = sx + (TILE_SIZE - label.get_width()) // 2
+        y = sy - 8 - int(fx.RISE * t)
+        self.screen.blit(label, (x, y))
 
     def _render_panel(self, engine: "Engine") -> None:
         """下部パネル：HP とメッセージログ。"""

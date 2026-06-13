@@ -18,6 +18,7 @@ from actions import (
     DescendAction,
     EscapeAction,
     MeleeAction,
+    MoveInventoryCursorAction,
     MovementAction,
     PickupAction,
     ToggleAttackModeAction,
@@ -120,20 +121,25 @@ def _camp_menu_keys(key: int, engine: "Engine") -> Optional[Action]:
 
 
 def _inventory_keys(key: int, engine: "Engine") -> Optional[Action]:
-    """持ち物メニュー中のキー操作。←→で分類切替、a〜で使用/装備、ESC/i で閉じる。"""
+    """持ち物メニュー中のキー操作。←→で分類切替、↑↓でカーソル、Enterで使用/装備。"""
     if key in (pygame.K_ESCAPE, pygame.K_i):
         return ToggleInventoryAction()  # 閉じる
-    if key == pygame.K_LEFT:
+    if key in (pygame.K_LEFT, pygame.K_a, pygame.K_h):
         return CycleInventoryCategoryAction(-1)
-    if key == pygame.K_RIGHT:
+    if key in (pygame.K_RIGHT, pygame.K_d, pygame.K_l):
         return CycleInventoryCategoryAction(1)
+    if key in (pygame.K_UP, pygame.K_w, pygame.K_k):
+        return MoveInventoryCursorAction(-1)
+    if key in (pygame.K_DOWN, pygame.K_s, pygame.K_j):
+        return MoveInventoryCursorAction(1)
 
-    # 現在の分類タブの中だけを a〜 で選ぶ
-    index = key - pygame.K_a  # a=0, b=1, ...
-    category = item_category.ORDER[engine.inventory_category]
-    items = item_category.items_in(engine.player.inventory.items, category)
-    if 0 <= index < len(items):
-        return UseItemAction(items[index])
+    # Enter でカーソル位置のアイテムを使用/装備
+    if key in (pygame.K_RETURN, pygame.K_KP_ENTER):
+        category = item_category.ORDER[engine.inventory_category]
+        items = item_category.items_in(engine.player.inventory.items, category)
+        if items:
+            index = min(engine.inventory_cursor, len(items) - 1)
+            return UseItemAction(items[index])
     return None
 
 

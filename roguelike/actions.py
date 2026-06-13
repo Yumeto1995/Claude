@@ -75,6 +75,7 @@ class ToggleInventoryAction(Action):
 
     def perform(self, engine: Engine, entity: Entity) -> None:
         engine.inventory_open = not engine.inventory_open
+        engine.inventory_cursor = 0
 
 
 class CycleInventoryCategoryAction(Action):
@@ -88,6 +89,25 @@ class CycleInventoryCategoryAction(Action):
     def perform(self, engine: Engine, entity: Entity) -> None:
         n = len(item_category.ORDER)
         engine.inventory_category = (engine.inventory_category + self.delta) % n
+        engine.inventory_cursor = 0  # 分類を変えたらカーソルは先頭へ
+
+
+class MoveInventoryCursorAction(Action):
+    """持ち物メニューのカーソルを上下に動かす（ターンは経過しない）。"""
+
+    consumes_turn = False
+
+    def __init__(self, delta: int):
+        self.delta = delta
+
+    def perform(self, engine: Engine, entity: Entity) -> None:
+        category = item_category.ORDER[engine.inventory_category]
+        items = item_category.items_in(entity.inventory.items, category)
+        if not items:
+            engine.inventory_cursor = 0
+            return
+        cursor = engine.inventory_cursor + self.delta
+        engine.inventory_cursor = max(0, min(cursor, len(items) - 1))
 
 
 class UseItemAction(Action):
@@ -266,11 +286,12 @@ class MeleeAction(ActionWithDirection):
         # 攻撃モーション成立：スタミナを消費（空振りでも消費する）
         if entity.fighter is not None:
             entity.fighter.spend_attack_stamina()
-        # 攻撃方向への踏み込みアニメを予約（命中・空振り問わず）
-        engine.pending_animations.append((entity, self.dx, self.dy))
-
         dest_x = entity.x + self.dx
         dest_y = entity.y + self.dy
+        # 攻撃方向への踏み込みアニメ＋攻撃先タイルの斬撃エフェクト（命中・空振り問わず）
+        engine.pending_animations.append((entity, self.dx, self.dy))
+        engine.pending_fx.append(("slash", dest_x, dest_y, self.dx, self.dy))
+
         target = engine.game_map.get_blocking_entity_at(dest_x, dest_y)
         # 攻撃先に戦える相手がいなければ空振り（攻撃モードでの素振りなど）
         if target is None or target.fighter is None or entity.fighter is None:
@@ -285,6 +306,10 @@ class MeleeAction(ActionWithDirection):
         engine.message_log.add_message(
             f"{entity.name} が {target.name} を攻撃 → {damage} ダメージ", attack_color
         )
+        # 被弾フラッシュ＋ダメージ数字（プレイヤーが受けたダメージは赤系で表示）
+        engine.pending_fx.append(("flash", target))
+        popup_color = (255, 90, 90) if target is engine.player else (255, 240, 140)
+        engine.pending_fx.append(("popup", dest_x, dest_y, f"-{damage}", popup_color))
         combat.inflict_damage(engine, target, damage, attacker=entity)
 
 

@@ -27,6 +27,7 @@ class Engine:
         self.attack_mode = False     # True なら方向キーで攻撃、False なら移動
         self.inventory_open = False  # 持ち物メニューを開いているか
         self.inventory_category = 0  # 持ち物メニューで選択中の分類タブ
+        self.inventory_cursor = 0    # 持ち物メニューで選択中の行（カーソル位置）
         # 拠点（魔法のテント＝歩けるテント内マップ）の状態
         self.in_camp = False
         self.camp_menu = None        # None=拠点を歩いている / 文字列=設備メニュー表示中
@@ -44,6 +45,9 @@ class Engine:
         # 攻撃・移動モーションの予約 [(entity, dx, dy), ...]。Renderer が再生する。
         self.pending_animations = []
         self.pending_moves = []
+        # 視覚エフェクトの予約。("slash", x, y, dx, dy) / ("flash", entity) /
+        # ("popup", x, y, text, color) のタプルを積む。
+        self.pending_fx = []
         self.message_log = MessageLog()
         self.message_log.add_message("ダンジョンへようこそ。", colors.WELCOME)
         # プレイヤーはテンプレートから複製して用意（位置は生成時に決まる）
@@ -251,6 +255,12 @@ class Engine:
         moves = getattr(self, "pending_moves", [])
         self.pending_moves = []
         return moves
+
+    def drain_fx(self):
+        """予約された視覚エフェクト（斬撃・フラッシュ・ダメージ数字）を取り出す。"""
+        fx = getattr(self, "pending_fx", [])
+        self.pending_fx = []
+        return fx
 
     def handle_enemy_turns(self) -> None:
         # AI を持つエンティティ（＝敵）だけが行動する。プレイヤーは ai=None。

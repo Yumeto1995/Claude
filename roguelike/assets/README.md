@@ -8,7 +8,9 @@
 - キャラ・アイテム・設備は**背景透過**推奨。床/壁は不透過でOK
 - タイルサイズを変えたいときは `graphics.py` の `TILE_SIZE`
 
-## 必要なファイル一覧（全30種）
+## 必要なファイル一覧（全31種）
+
+> Claude Chat で生成する場合のプロンプト集：[PROMPTS.md](PROMPTS.md)
 
 ### 背景（地形）
 | ファイル | 用途 |
@@ -68,3 +70,9 @@
 > 注：`food`/`dish`/`material`/`key_item`/`seed` は複数アイテムで共有。
 > 個別の絵にしたい場合は `entity_factories.py` の `sprite=` と `graphics.py` の
 > `PLACEHOLDER_COLORS` にキーを追加する。
+
+### 攻撃ポーズ（任意・あれば自動使用）
+
+`<キー>_attack.png`（例：`player_attack.png`、`goblin_attack.png`）を置くと、
+そのキャラの**攻撃モーション中だけ**自動でこの画像に差し替わる。
+無ければ通常画像のまま踏み込みアニメだけが再生される（必須ではない）。
