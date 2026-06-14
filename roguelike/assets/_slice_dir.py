@@ -35,19 +35,34 @@ e_br = float(np.mean((B_full - R_full)[edge]))       # 縁の青み(b-r)平均
 e_val = float(np.mean(VAL[edge]))
 BLUISH = e_br > 8                                      # 青み市松か
 
+# 青み市松の2トーン(明/暗)を縁(4px枠=必ず背景)から採取し、その灰青軸からの距離で背景判定。
+# 旧来の b>r+11 はシートごとの僅かな色差(b-r≈10〜12)で破綻したため軸距離方式に変更。
+_ep = rgb_full[edge].astype(float)
+_emx = _ep.max(1)
+_lo, _hi = _ep[_emx < 130], _ep[_emx >= 130]
+TONE_D = _lo.mean(0) if len(_lo) else np.array([60., 60., 60.])
+TONE_L = _hi.mean(0) if len(_hi) else np.array([200., 200., 200.])
+_vec = TONE_L - TONE_D
+_vv = float((_vec * _vec).sum()) or 1.0
+BG_T = float(os.environ.get("BG_T", "36"))            # 軸距離しきい値
 
-def bg_mask(mx, mn, val, r, b):
-    """背景マスク。青み市松は青み(b>r)で判定（暖色/緑/赤の本体は除外。鋼剣は同色だが
-    輪郭で囲まれ縁塗りつぶしでは残る）。白背景は純白帯、暗背景は暗い無彩色。"""
+
+def bg_mask(rgb):
+    """背景マスク。青み市松は2トーンを結ぶ灰青軸からの距離(<BG_T)で判定（暖色/緑/赤や
+    クリーム白ズボンは軸から遠く残る。鋼剣/盾は軸に近い色でも輪郭に囲まれ、縁からの
+    塗りつぶしが到達できず残る）。白背景は純白帯、暗背景は暗い無彩色。"""
+    mx, mn, val = rgb.max(2), rgb.min(2), rgb.mean(2)
     if BLUISH:
-        # 背景は強い青み(b-r≈25)。クリーム白ズボン(b-r≈6)は本体なので b>r+11 で守る。
-        return (b > r + 11) & (mx - mn < 46) & (val >= 60) & (val <= 222)
+        d = rgb.astype(float) - TONE_D
+        t = np.clip((d * _vec).sum(2) / _vv, 0.0, 1.0)
+        proj = TONE_D + t[..., None] * _vec
+        return np.sqrt(((rgb.astype(float) - proj) ** 2).sum(2)) < BG_T
     if e_val >= 200:                                  # 白背景
         return (mx - mn < 40) & (val >= 196)
     return (mx - mn < 26) & (val <= e_val + 35) & (val >= 40)  # 暗背景
 
 
-BG = bg_mask(MX, MN, VAL, R_full, B_full)
+BG = bg_mask(rgb_full)
 
 
 def bands(prof, thr, minlen=10):
@@ -74,13 +89,20 @@ y0 = max(0, y0 - 4)
 y1 = min(H, y1 + 8)
 # 列検出
 cb = bands(op[:, y0:y1].sum(1), (y1 - y0) * 0.06, 16)
-print(f"DIR={DIR} content row y {y0}-{y1}, {len(cb)} columns: {[(a+b)//2 for a,b in cb]}")
+print(f"DIR={DIR} content row y {y0}-{y1}, {len(cb)} auto columns: {[(a+b)//2 for a,b in cb]}")
+# COLS=境界リスト（例 0,352,704,990,1408）で列を決め打ち。自動検出が剣の分離で
+# 破綻するシート用。剣の破片が作る隙間が真のコマ間隙間より広く、隙間ベースの
+# 自動グループ化は不能なため、診断画像を見て境界を明示するのが確実。
+_cols = os.environ.get("COLS", "")
+if _cols:
+    cuts = [int(c) for c in _cols.split(",")]
+    cb = [(cuts[i], cuts[i + 1]) for i in range(len(cuts) - 1)]
+    print(f"  COLS override -> {len(cb)} cells, centers {[(a+b)//2 for a,b in cb]}")
 
 
 def remove_bg(cell):
     rgb = pygame.surfarray.array3d(cell).astype(int)
-    mx, mn, val = rgb.max(2), rgb.min(2), rgb.mean(2)
-    bgm = bg_mask(mx, mn, val, rgb[:, :, 0], rgb[:, :, 2])
+    bgm = bg_mask(rgb)
     w, h = cell.get_size()
     vis = np.zeros((w, h), bool); dq = deque()
     for x in range(w):

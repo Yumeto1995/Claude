@@ -206,8 +206,10 @@ def _make_placeholder(key: str) -> pygame.Surface:
 
 
 def load_sprites() -> Dict[str, pygame.Surface]:
-    """assets 内の PNG をすべて読み込む（ファイル名＝キー）。
+    """assets 配下(サブフォルダ含む)の PNG を再帰読み込み（パスを除くファイル名＝キー）。
 
+    characters/ monsters/ backgrounds/ items/ structures/ 等に整理済みでも、キーは
+    サブフォルダを除いたファイル名（例 characters/player/player_left.png → "player_left"）。
     方向別・歩行・攻撃のコマ（例 player_down_walk1.png / player_right_walk1.png）も
     そのままファイル名＝キーで全部読む。**左右反転による自動生成は行わない**——右向きは
     専用の `*_right*` 画像を用意して読み込む（鏡像だと剣が逆の手になるため）。
@@ -216,14 +218,16 @@ def load_sprites() -> Dict[str, pygame.Surface]:
     """
     sprites: Dict[str, pygame.Surface] = {}
     if os.path.isdir(ASSETS_DIR):
-        for fn in os.listdir(ASSETS_DIR):
-            if not fn.endswith(".png"):
-                continue
-            try:
-                img = pygame.image.load(os.path.join(ASSETS_DIR, fn)).convert_alpha()
-            except pygame.error:
-                continue
-            sprites[fn[:-4]] = pygame.transform.scale(img, (TILE_SIZE, TILE_SIZE))
+        # サブフォルダを再帰探索。キーはパスを除いたファイル名（全体で一意の前提）。
+        for root, _dirs, files in os.walk(ASSETS_DIR):
+            for fn in files:
+                if not fn.endswith(".png"):
+                    continue
+                try:
+                    img = pygame.image.load(os.path.join(root, fn)).convert_alpha()
+                except pygame.error:
+                    continue
+                sprites[fn[:-4]] = pygame.transform.scale(img, (TILE_SIZE, TILE_SIZE))
     # PNG が無い必須キーは仮タイルで代用
     for key in PLACEHOLDER_COLORS:
         if key not in sprites:
