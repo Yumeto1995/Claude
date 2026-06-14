@@ -144,6 +144,9 @@ PLACEHOLDER_COLORS: Dict[str, tuple] = {
     "cave_floor": (96, 80, 62), "cave_wall": (58, 49, 42), "cave_safe_floor": (74, 100, 90),
     "stone_floor": (78, 80, 98), "stone_wall": (52, 54, 70), "stone_safe_floor": (72, 102, 96),
     "meadow_floor": (156, 126, 86), "meadow_wall": (52, 92, 46), "meadow_safe_floor": (150, 150, 104),
+    # セーフルーム＝ログハウス内装（床=板/敷物・壁=丸太/窓）。テーマに依らず使う。
+    "log_floor": (176, 120, 68), "log_rug": (170, 80, 70),
+    "log_wall": (150, 100, 55), "log_window": (150, 110, 72),
     # 村・建物（gen_tiles.py が生成）
     "grass": (74, 112, 58), "tree": (44, 84, 44), "door": (150, 110, 66),
     "wood_wall": (104, 72, 44), "wood_floor": (150, 112, 70),
@@ -154,6 +157,7 @@ TERRAIN_KEYS = {
     "cave_floor", "cave_wall", "cave_safe_floor",
     "stone_floor", "stone_wall", "stone_safe_floor",
     "meadow_floor", "meadow_wall", "meadow_safe_floor",
+    "log_floor", "log_rug", "log_wall", "log_window",
     "grass", "tree", "door", "wood_wall", "wood_floor",
 }
 
@@ -204,8 +208,9 @@ def _make_placeholder(key: str) -> pygame.Surface:
 def load_sprites() -> Dict[str, pygame.Surface]:
     """assets 内の PNG をすべて読み込む（ファイル名＝キー）。
 
-    方向別・歩行・攻撃のコマ（例 player_down_walk1.png）もそのまま全部読む。
-    `*_left*` のキーからは水平反転で `*_right*` を自動生成する（右向き＝左向きの鏡像）。
+    方向別・歩行・攻撃のコマ（例 player_down_walk1.png / player_right_walk1.png）も
+    そのままファイル名＝キーで全部読む。**左右反転による自動生成は行わない**——右向きは
+    専用の `*_right*` 画像を用意して読み込む（鏡像だと剣が逆の手になるため）。
     PLACEHOLDER_COLORS にあって PNG が無いキーは仮タイルで代用。
     32px 原寸の地形・アイテムは TILE_SIZE への整数倍拡大でくっきり表示される。
     """
@@ -219,12 +224,6 @@ def load_sprites() -> Dict[str, pygame.Surface]:
             except pygame.error:
                 continue
             sprites[fn[:-4]] = pygame.transform.scale(img, (TILE_SIZE, TILE_SIZE))
-    # 左向きから右向きを鏡像生成（右向き専用PNGが無いときだけ）
-    for key in list(sprites):
-        if "_left" in key:
-            rkey = key.replace("_left", "_right")
-            if rkey not in sprites:
-                sprites[rkey] = pygame.transform.flip(sprites[key], True, False)
     # PNG が無い必須キーは仮タイルで代用
     for key in PLACEHOLDER_COLORS:
         if key not in sprites:
@@ -609,17 +608,53 @@ class Renderer:
                 sid = gm.tiles["sprite"][tx, ty]
                 pos = (tx * TILE_SIZE - cam_x, ty * TILE_SIZE - cam_y)
                 if sid == tile_types.SPRITE_WALL:
-                    surf = self._wall_surface(theme, self._wall_mask(gm, tx, ty), dark)
-                elif sid == tile_types.SPRITE_DOWNSTAIRS:
-                    surf = self.dark_sprites["stairs_down"] if dark else self.sprites["stairs_down"]
-                elif sid == tile_types.SPRITE_UPSTAIRS:
-                    surf = self.dark_sprites["stairs_up"] if dark else self.sprites["stairs_up"]
+                    if self._is_safe_wall(gm, tx, ty):   # セーフルームを囲む壁＝丸太（時々窓）
+                        key = self._det_pick(tx, ty, self.SAFE_WALL_VARIANTS)
+                        surf = self.dark_sprites[key] if dark else self.sprites[key]
+                    else:
+                        surf = self._wall_surface(theme, self._wall_mask(gm, tx, ty), dark)
+                elif sid in (tile_types.SPRITE_DOWNSTAIRS, tile_types.SPRITE_UPSTAIRS):
+                    # 階段は透過オブジェクト。下に床を敷いてから階段を重ねる
+                    # （敷かないと透過部分が黒く抜ける）。
+                    screen.blit(self._floor_under(gm, tx, ty, theme, dark), pos)
+                    skey = "stairs_down" if sid == tile_types.SPRITE_DOWNSTAIRS else "stairs_up"
+                    surf = self.dark_sprites[skey] if dark else self.sprites[skey]
+                elif gm.safe[tx, ty]:                    # セーフルームの床＝板（時々敷物）
+                    key = self._det_pick(tx, ty, self.SAFE_FLOOR_VARIANTS)
+                    surf = self.dark_sprites[key] if dark else self.sprites[key]
                 else:
-                    base = f"{theme}_safe_floor" if gm.safe[tx, ty] else f"{theme}_floor"
-                    smask = (1 if self._is_wall(gm, tx, ty - 1) else 0) \
-                        | (2 if self._is_wall(gm, tx - 1, ty) else 0)
-                    surf = self._floor_surface(base, smask, dark)
+                    surf = self._floor_under(gm, tx, ty, theme, dark)
                 screen.blit(surf, pos)
+
+    # セーフルーム＝ログハウス内装のタイル（テーマ非依存）。基本を多く、窓/敷物はまばら。
+    SAFE_FLOOR_VARIANTS = ("log_floor", "log_floor", "log_floor", "log_floor", "log_rug")
+    SAFE_WALL_VARIANTS = ("log_wall", "log_wall", "log_wall", "log_window")
+
+    @staticmethod
+    def _det_pick(tx: int, ty: int, variants):
+        """タイル座標から決定的に1枚選ぶ（毎フレーム同じ柄でちらつかない）。"""
+        h = ((tx * 73856093) ^ (ty * 19349663)) & 0x7FFFFFFF
+        return variants[h % len(variants)]
+
+    def _floor_under(self, gm, tx: int, ty: int, theme: str, dark: bool) -> pygame.Surface:
+        """そのタイルの床Surface（セーフ=板/敷物、通常=テーマ床＋壁影）。
+        階段など透過オブジェクトの下地にも使う。"""
+        if gm.safe[tx, ty]:
+            key = self._det_pick(tx, ty, self.SAFE_FLOOR_VARIANTS)
+            return self.dark_sprites[key] if dark else self.sprites[key]
+        smask = (1 if self._is_wall(gm, tx, ty - 1) else 0) \
+            | (2 if self._is_wall(gm, tx - 1, ty) else 0)
+        return self._floor_surface(f"{theme}_floor", smask, dark)
+
+    def _is_safe_wall(self, gm, tx: int, ty: int) -> bool:
+        """セーフルームの床に隣接する壁か（8近傍）。＝ログハウスの内壁にする。"""
+        for dy in (-1, 0, 1):
+            for dx in (-1, 0, 1):
+                nx, ny = tx + dx, ty + dy
+                if (gm.in_bounds(nx, ny) and gm.safe[nx, ny]
+                        and gm.tiles["sprite"][nx, ny] != tile_types.SPRITE_WALL):
+                    return True
+        return False
 
     # 屋外の草地バリアント。基本を多めに、装飾はまばらに混ぜる重み付きリスト。
     GRASS_VARIANTS = (

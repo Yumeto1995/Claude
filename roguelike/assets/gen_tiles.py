@@ -36,6 +36,22 @@ PALETTES = {
 }
 
 
+# 2000年代初頭風の太いドットへ量子化する大きさ（2=ドット2倍。64を割り切る値で継ぎ目維持）。
+PIX_BLOCK = 2
+
+
+def pixelate(s, block=PIX_BLOCK):
+    """各 block×block をブロック中心の色で塗りつぶし、太いドットに量子化する。"""
+    if block <= 1:
+        return s
+    out = pygame.Surface((S, S), pygame.SRCALPHA)
+    for by in range(0, S, block):
+        for bx in range(0, S, block):
+            col = s.get_at((min(S - 1, bx + block // 2), min(S - 1, by + block // 2)))
+            out.fill(col, (bx, by, block, block))
+    return out
+
+
 def _clamp(v):
     return max(0, min(255, v))
 
@@ -56,6 +72,60 @@ def make_surface(base, spec, rng, pebbles=0, peb_colors=None):
                 for xx in range(cx - r, cx + r + 1):
                     if 0 <= xx < S and 0 <= yy < S and (xx - cx) ** 2 + (yy - cy) ** 2 <= r * r:
                         s.set_at((xx, yy), (*col, 255))
+    return s
+
+
+def _shaded_rock(s, cx, cy, r, base, rng):
+    """光源=左上の小岩。左上に明部・右下に影で、ぺたっとした面に立体を出す。"""
+    light = tuple(min(255, c + 42) for c in base)
+    dark = tuple(max(0, c - 46) for c in base)
+    for yy in range(cy - r, cy + r + 1):
+        for xx in range(cx - r, cx + r + 1):
+            if 0 <= xx < S and 0 <= yy < S and (xx - cx) ** 2 + (yy - cy) ** 2 <= r * r:
+                d = (xx - cx) + (yy - cy)
+                col = light if d < -r * 0.4 else (dark if d > r * 0.5 else base)
+                s.set_at((xx, yy), (*col, 255))
+
+
+def _cracks(s, rng, base, n=3):
+    """細いひび割れを数本。地の色より暗い線を折れながら走らせる。"""
+    dark = tuple(max(0, c - 38) for c in base)
+    for _ in range(n):
+        x, y = rng.randint(6, S - 6), rng.randint(6, S - 6)
+        for _ in range(rng.randint(6, 12)):
+            s.set_at((x, y), (*dark, 255))
+            x = max(0, min(S - 1, x + rng.choice((-1, 0, 1))))
+            y = max(0, min(S - 1, y + rng.choice((0, 1, 1))))
+
+
+def make_rock_floor(rng, p):
+    """岩盤の床：砂目の下地に陰影付きの石とひび割れを散らす。"""
+    s = make_surface(p["floor"], p["floor_spec"], rng)
+    peb = [p["pebble_dark"], p["pebble_light"]]
+    for _ in range(rng.randint(6, 9)):
+        _shaded_rock(s, rng.randint(5, S - 5), rng.randint(5, S - 5),
+                     rng.randint(2, 4), rng.choice(peb), rng)
+    _cracks(s, rng, p["floor"], n=3)
+    return s
+
+
+def make_rock_wall(rng, p):
+    """岩壁：砂目の下地に大きめの陰影石を密に積む（塊の岩肌）。"""
+    s = make_surface(p["wall"], p["wall_spec"], rng)
+    peb = [p["pebble_dark"], p["pebble_light"]]
+    for _ in range(rng.randint(8, 12)):
+        _shaded_rock(s, rng.randint(4, S - 4), rng.randint(4, S - 4),
+                     rng.randint(3, 6), rng.choice(peb), rng)
+    return s
+
+
+def make_rock_safe(rng, p):
+    """セーフルームの床：祭壇風に明るい色＋苔むした石を少し。"""
+    s = make_surface(p["safe"], p["safe_spec"], rng)
+    moss = [(60, 86, 78), (96, 122, 112)]
+    for _ in range(rng.randint(5, 8)):
+        _shaded_rock(s, rng.randint(5, S - 5), rng.randint(5, S - 5),
+                     rng.randint(2, 3), rng.choice(moss), rng)
     return s
 
 
@@ -304,17 +374,12 @@ def generate():
         "meadow_wall": make_meadow_wall(vrng),
     }
     for name, surf in extras.items():
-        pygame.image.save(surf, os.path.join(ASSETS_DIR, f"{name}.png"))
+        pygame.image.save(pixelate(surf), os.path.join(ASSETS_DIR, f"{name}.png"))
     for theme, p in PALETTES.items():
         rng = random.Random(hash(theme) & 0xFFFF)  # テーマ固定シードで再現性
-        peb = [p["pebble_dark"], p["pebble_light"]]
-        floor = make_surface(p["floor"], p["floor_spec"], rng, pebbles=10, peb_colors=peb)
-        wall = make_surface(p["wall"], p["wall_spec"], rng, pebbles=6, peb_colors=peb)
-        safe = make_surface(p["safe"], p["safe_spec"], rng, pebbles=8,
-                            peb_colors=[(60, 86, 78), (96, 122, 112)])
-        pygame.image.save(floor, os.path.join(ASSETS_DIR, f"{theme}_floor.png"))
-        pygame.image.save(wall, os.path.join(ASSETS_DIR, f"{theme}_wall.png"))
-        pygame.image.save(safe, os.path.join(ASSETS_DIR, f"{theme}_safe_floor.png"))
+        pygame.image.save(pixelate(make_rock_floor(rng, p)), os.path.join(ASSETS_DIR, f"{theme}_floor.png"))
+        pygame.image.save(pixelate(make_rock_wall(rng, p)), os.path.join(ASSETS_DIR, f"{theme}_wall.png"))
+        pygame.image.save(pixelate(make_rock_safe(rng, p)), os.path.join(ASSETS_DIR, f"{theme}_safe_floor.png"))
     print("regenerated dungeon tiles into", ASSETS_DIR)
 
 

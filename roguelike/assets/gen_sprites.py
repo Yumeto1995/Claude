@@ -46,11 +46,21 @@ def disc(s, cx, cy, r, c):
                 px(s, x, y, c)
 
 
+def _mix(a, b, t):
+    """色 a→b を t で線形補間。"""
+    return tuple(int(a[i] + (b[i] - a[i]) * t) for i in range(3))
+
+
 def ball(s, cx, cy, r, base, light, shadow, ol):
-    disc(s, cx, cy, r + 1, ol)
-    disc(s, cx, cy, r, shadow)
-    disc(s, cx - 1.4, cy - 1.4, r, base)
-    disc(s, cx - r * 0.34, cy - r * 0.34, r * 0.52, light)
+    """光源=左上の球。輪郭→最暗→影→ベース→ハイライト→鏡面の5階調＋鏡面で立体に。"""
+    deep = _mix(shadow, ol, 0.5)
+    disc(s, cx, cy, r + 1, ol)                                  # 輪郭
+    disc(s, cx, cy, r, deep)                                    # 右下＝最暗
+    disc(s, cx - r * 0.18, cy - r * 0.18, r * 0.94, shadow)     # 影
+    disc(s, cx - r * 0.36, cy - r * 0.36, r * 0.80, base)       # ベース
+    disc(s, cx - r * 0.50, cy - r * 0.50, r * 0.46, light)      # ハイライト
+    disc(s, cx - r * 0.58, cy - r * 0.58, r * 0.20,
+         _mix(light, (255, 255, 255), 0.55))                    # 鏡面
 
 
 def outline_pass(s, ol):
@@ -68,9 +78,10 @@ def outline_pass(s, ol):
 
 # ============================================================ 共通の人型描画
 def _limb(s, cx, top, bot, w, col, shade):
-    """縦の手足。左側に陰。"""
+    """縦の手足（円筒）。光源=左上：左端に光、右端に影。"""
     rect(s, cx - w, top, cx + w, bot, col)
-    rect(s, cx - w, top, cx - w, bot, shade)
+    rect(s, cx - w, top, cx - w, bot, _mix(col, (255, 255, 255), 0.22))  # 左＝光
+    rect(s, cx + w, top, cx + w, bot, shade)                            # 右＝影
 
 
 def draw_humanoid(P, direction, pose):
@@ -81,6 +92,10 @@ def draw_humanoid(P, direction, pose):
     lean = 0
     if pose == "attack":
         lean = {"down": (0, 1), "up": (0, -1), "left": (-2, 0)}[direction][0]
+
+    # ---- マント（体の後ろ＝最初に描く。歩行で少し揺れる）----
+    if P.get("cape"):
+        _cape(s, P, direction, pose, bob, lean)
 
     # ---- 脚（全身歩行：左右交互に踏み出す）----
     lx, rx = 27, 37
@@ -139,10 +154,16 @@ def draw_humanoid(P, direction, pose):
         rect(s, la - 1, arm_y1 + swing[0], la + 1, arm_y1 + 2 + swing[0], P["skin"])
         rect(s, ra - 1, arm_y1 + swing[1], ra + 1, arm_y1 + 2 + swing[1], P["skin"])
 
+    # ---- 盾（腕の上に構える丸盾。武器と反対側）----
+    if P.get("shield"):
+        _shield(s, P, direction, pose, bob, lean)
+
     # ---- 頭 ----
     hcx, hcy, hr = 32 + lean, 20 + bob, 12
     ball(s, hcx, hcy, hr, P["skin"], P["skin_l"], P["skin_s"], OL)
     _head_features(s, P, direction, hcx, hcy, hr)
+    if P.get("spiky"):
+        _hair_spikes(s, P, direction, hcx, hcy, hr)
 
     # ---- 耳（ゴブリン）----
     if P.get("ears"):
@@ -210,6 +231,48 @@ def _ears(s, P, direction, hcx, hcy):
         px(s, hcx - 14, hcy - 4, skin_l); px(s, hcx + 14, hcy - 4, skin_l)
 
 
+def _cape(s, P, direction, pose, bob, lean):
+    """背中の赤マント（体の後ろに先に描く）。歩行で裾が少し揺れる。"""
+    cape, cs = P["cape"], P["cape_s"]
+    sway = {"walk1": 2, "walk2": -2}.get(pose, 0)
+    if direction == "up":   # 後ろ姿＝マントが背中を覆う
+        pygame.draw.polygon(s, cape, [(19 + lean, 30 + bob), (45 + lean, 30 + bob),
+                                      (47 + lean + sway, 61), (17 + lean + sway, 61)])
+        rect(s, 31 + lean, 32 + bob, 33 + lean, 59, cs)             # 中央の縦の合わせ
+    elif direction == "left":  # 横向き＝後ろ（右）へ流れる
+        pygame.draw.polygon(s, cape, [(33 + lean, 32 + bob), (41 + lean, 33 + bob),
+                                      (45 + lean + sway, 57), (33 + lean + sway, 57)])
+        rect(s, 41 + lean, 36 + bob, 43 + lean, 55, cs)
+    else:                   # 正面＝肩の両脇と脚の裏から覗く
+        pygame.draw.polygon(s, cape, [(22 + lean, 33 + bob), (42 + lean, 33 + bob),
+                                      (48 + lean + sway, 60), (16 + lean + sway, 60)])
+        pygame.draw.polygon(s, cs, [(32 + lean, 33 + bob), (42 + lean, 33 + bob),
+                                    (48 + lean + sway, 60), (32 + lean + sway, 60)])
+
+
+def _shield(s, P, direction, pose, bob, lean):
+    """十字紋の丸盾（武器と反対＝左側に構える）。"""
+    face, rim, em = P["shield_face"], P["shield_rim"], P["shield_emblem"]
+    cx, cy, r = 17 + lean, 40 + bob, 8
+    if direction == "up":   # 後ろ向きは左肩越しに少しだけ
+        cx, cy, r = 18 + lean, 37 + bob, 6
+    disc(s, cx, cy, r + 1, rim)
+    disc(s, cx, cy, r, face)
+    disc(s, cx - 2, cy - 2, max(2, r * 0.4), _mix(face, (255, 255, 255), 0.30))  # 受光
+    rect(s, cx - 1, cy - 5, cx + 1, cy + 5, em)     # 十字（縦）
+    rect(s, cx - 4, cy - 1, cx + 4, cy + 1, em)     # 十字（横）
+
+
+def _hair_spikes(s, P, direction, hcx, hcy, hr):
+    """逆立った髪（トゲ）。頭頂のまわりに三角を並べる。"""
+    hair, hl = P["hair"], P["hair_l"]
+    base_y = hcy - hr + 3
+    for sx, tip in ((-9, 1), (-4, -2), (1, -3), (6, -2), (10, 1)):
+        x = hcx + sx
+        pygame.draw.polygon(s, hair, [(x - 3, base_y + 3), (x, base_y - 6 + tip), (x + 3, base_y + 3)])
+    pygame.draw.polygon(s, hl, [(hcx - 7, base_y + 2), (hcx - 4, base_y - 7), (hcx - 2, base_y + 2)])
+
+
 def _weapon(s, P, direction, pose, bob, lean):
     kind = P["weapon"]
     if kind == "sword":
@@ -245,14 +308,19 @@ def _weapon(s, P, direction, pose, bob, lean):
 
 # ============================================================ パレット
 PALETTES = {
-    "player": {
-        "OL": (28, 24, 44),
-        "skin": (236, 200, 158), "skin_l": (250, 226, 192), "skin_s": (198, 158, 120),
-        "hair": (138, 88, 48), "hair_l": (178, 124, 70), "hair_s": (96, 56, 32),
-        "top": (58, 112, 202), "top_l": (100, 158, 236), "top_s": (40, 76, 152),
-        "belt": (70, 50, 36), "buckle": (226, 186, 78),
-        "leg": (92, 72, 56), "leg_s": (60, 46, 36), "boot": (66, 48, 38), "boot_s": (44, 32, 26),
-        "weapon": "sword", "steel": (208, 216, 232), "steel_l": (246, 250, 255), "gold": (226, 186, 78),
+    "player": {   # 添付の冒険者デザイン：茶のトゲ髪・緑チュニック・赤マント・十字の丸盾・白ズボン・茶ブーツ
+        "OL": (30, 26, 40),
+        "skin": (238, 198, 152), "skin_l": (252, 224, 186), "skin_s": (198, 154, 112),
+        "hair": (120, 78, 42), "hair_l": (166, 114, 64), "hair_s": (84, 52, 28),
+        "top": (74, 130, 64), "top_l": (106, 166, 92), "top_s": (50, 96, 46),   # 緑チュニック
+        "belt": (96, 64, 40), "buckle": (226, 186, 78),
+        "leg": (224, 216, 198), "leg_s": (178, 170, 150),                       # 白ズボン
+        "boot": (104, 68, 40), "boot_s": (72, 46, 28),
+        "weapon": "sword", "steel": (212, 220, 236), "steel_l": (248, 250, 255), "gold": (226, 186, 78),
+        "cape": (190, 44, 46), "cape_s": (132, 28, 36),                         # 赤マント
+        "shield": True, "shield_face": (150, 110, 66),                          # 十字の丸盾
+        "shield_rim": (104, 74, 46), "shield_emblem": (236, 236, 228),
+        "spiky": True,
         "mouth": "normal",
     },
     "npc": {
@@ -341,9 +409,28 @@ def make_corpse():
     return s
 
 
+# ============================================================ 量子化（太いドット化）
+# 2000年代初頭（GBA期）風の太いドットにするため、描いた絵を粗いグリッドへ
+# スナップする。PIX_BLOCK=2 なら 32×32 相当（ドット2倍）。64 を割り切る値にすると
+# タイルの継ぎ目が保たれる（2 や 4）。1 で無効（従来の細かいドット）。
+PIX_BLOCK = 2
+
+
+def pixelate(s, block=PIX_BLOCK):
+    """各 block×block をブロック中心の色で塗りつぶし、太いドットに量子化する。"""
+    if block <= 1:
+        return s
+    out = pygame.Surface((S, S), pygame.SRCALPHA)
+    for by in range(0, S, block):
+        for bx in range(0, S, block):
+            col = s.get_at((min(S - 1, bx + block // 2), min(S - 1, by + block // 2)))
+            out.fill(col, (bx, by, block, block))
+    return out
+
+
 # ============================================================ 出力
 def _save(s, name):
-    pygame.image.save(s, os.path.join(ASSETS_DIR, f"{name}.png"))
+    pygame.image.save(pixelate(s), os.path.join(ASSETS_DIR, f"{name}.png"))
 
 
 def generate():
