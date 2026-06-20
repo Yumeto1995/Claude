@@ -994,10 +994,18 @@ class Renderer:
             return self.sprites[key]
         self._draw_terrain(gm, cam_x, cam_y, terrain)
 
-        # 設備
+        # 住居の固定設備
         for (wx, wy), kind in camp_map.STATIONS.items():
-            spr = self._station_sprite(kind, engine)
-            screen.blit(self.sprites[spr], (wx * TILE_SIZE - cam_x, wy * TILE_SIZE - cam_y))
+            screen.blit(self.sprites["st_" + kind],
+                        (wx * TILE_SIZE - cam_x, wy * TILE_SIZE - cam_y))
+        # 自由配置した畑・牧柵・いけす
+        for (ox, oy), obj in engine.camp_objects.items():
+            sx, sy = ox * TILE_SIZE - cam_x, oy * TILE_SIZE - cam_y
+            screen.blit(self.sprites[self._camp_object_sprite(obj)], (sx, sy))
+            c = obj["content"]
+            if c is not None and c["steps_left"] <= 0:   # 収穫可能マーカー
+                pygame.draw.circle(screen, (255, 230, 90),
+                                   (int(sx + TILE_SIZE - 10), int(sy + 10)), 5)
 
         # 区画名ラベル
         for text, lx, ly in camp_map.ZONE_LABELS:
@@ -1012,20 +1020,38 @@ class Renderer:
             (ppx, ppy),
         )
 
-        # 足元の設備案内（設備メニューを開いている間は出さない）
-        here = camp_map.STATIONS.get((engine.player.x, engine.player.y))
-        if here is not None and engine.camp_menu is None:
-            label = camp_map.STATION_LABELS.get(here, here)
-            self._draw_chip("Enter で " + label, 8, self.play_h - 36, colors.DESCEND)
+        # 足元の案内（建設モード / 住居設備 / 配置物）。設備メニュー中は出さない。
+        pos = (engine.player.x, engine.player.y)
+        bk = getattr(engine, "camp_build_kind", None)
+        if bk is not None:
+            label, cost = camp_map.BUILDABLE[bk][:2]
+            px = engine.player.x * TILE_SIZE - cam_x
+            py = engine.player.y * TILE_SIZE - cam_y
+            free = pos not in camp_map.STATIONS and pos not in engine.camp_objects
+            pygame.draw.rect(screen, (120, 230, 140) if free else (230, 120, 110),
+                             (px, py, TILE_SIZE, TILE_SIZE), 2)
+            self._draw_chip(f"建設:{label}({cost})  Enter設置 b切替 x撤去 ESC終了",
+                            8, self.play_h - 36, (255, 205, 90))
+        elif engine.camp_menu is None:
+            here = camp_map.STATIONS.get(pos)
+            if here is not None:
+                self._draw_chip("Enter で " + camp_map.STATION_LABELS.get(here, here),
+                                8, self.play_h - 36, colors.DESCEND)
+            elif pos in engine.camp_objects:
+                lbl = camp_map.BUILDABLE[engine.camp_objects[pos]["kind"]][0]
+                self._draw_chip("Enter で " + lbl, 8, self.play_h - 36, colors.DESCEND)
+            else:
+                self._draw_chip("b で建設モード", 8, self.play_h - 36, (150, 210, 150))
 
     @staticmethod
-    def _station_sprite(kind: str, engine: "Engine") -> str:
-        if kind.startswith("farm"):
-            plot = engine.farm_plots[int(kind[4:])]
-            if plot is None:
+    def _camp_object_sprite(obj) -> str:
+        """配置した農場設備のスプライト（畑は栽培状態でempty/grow/readyに変化）。"""
+        kind, c = obj["kind"], obj["content"]
+        if kind == "farm":
+            if c is None:
                 return "farm_empty"
-            return "farm_ready" if plot["steps_left"] <= 0 else "farm_grow"
-        return "st_" + kind
+            return "farm_ready" if c["steps_left"] <= 0 else "farm_grow"
+        return "st_ranch" if kind == "pen" else "st_fishery"
 
     def _render_camp_menu(self, engine: "Engine") -> None:
         """設備メニュー：全画面を暗くして大きな装飾ウィンドウに表示する。"""

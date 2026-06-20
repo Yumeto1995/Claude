@@ -196,6 +196,18 @@ class CampInteractAction(Action):
         engine.camp_interact()
 
 
+class CampBuildAction(Action):
+    """建設モードの操作（cycle=種類切替 / place=設置 / remove=撤去 / exit=終了）。"""
+
+    consumes_turn = False
+
+    def __init__(self, op: str):
+        self.op = op
+
+    def perform(self, engine: Engine, entity: Entity) -> None:
+        engine.camp_build_op(self.op)
+
+
 class CampLeaveAction(Action):
     """テントからダンジョンに戻る（ESC）。"""
 

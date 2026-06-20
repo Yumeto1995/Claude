@@ -9,6 +9,7 @@ from actions import (
     Action,
     BumpAction,
     CampBackAction,
+    CampBuildAction,
     CampInteractAction,
     CampLeaveAction,
     CampMoveCursorAction,
@@ -102,7 +103,20 @@ def dispatch_event(event: pygame.event.Event, engine: "Engine") -> Optional[Acti
         if engine.in_camp:
             if engine.camp_menu is not None:
                 return _camp_menu_keys(key, engine)   # 設備メニュー中
-            # テント内を歩いている：Enter=設備を使う、ESC=ダンジョンへ
+            # 建設モード中：Enter=設置 / b=種類切替 / x=撤去 / ESC=終了
+            if getattr(engine, "camp_build_kind", None) is not None:
+                if key in (pygame.K_RETURN, pygame.K_KP_ENTER):
+                    return CampBuildAction("place")
+                if key == pygame.K_b:
+                    return CampBuildAction("cycle")
+                if key in (pygame.K_x, pygame.K_DELETE, pygame.K_BACKSPACE):
+                    return CampBuildAction("remove")
+                if key == pygame.K_ESCAPE:
+                    return CampBuildAction("exit")
+                return None  # 方向キーはポーリングで移動
+            # テント内を歩いている：b=建設モード / Enter=設備 / ESC=ダンジョンへ
+            if key == pygame.K_b:
+                return CampBuildAction("cycle")
             if key in (pygame.K_RETURN, pygame.K_KP_ENTER):
                 return CampInteractAction()
             if key == pygame.K_ESCAPE:

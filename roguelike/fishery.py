@@ -1,4 +1,8 @@
-"""漁業。釣り（エサを消費して魚を釣る）と、養殖いけす（魚を繰り返し産出）。"""
+"""漁業。釣り（エサを消費して魚を釣る）と、養殖いけす（魚を繰り返し産出）。
+
+いけすは自由配置の農場オブジェクト（kind="tank"）として扱う。空のいけすでは
+釣り（エサで魚を得る）か、魚を入れて養殖を始められる。
+"""
 from __future__ import annotations
 
 import random
@@ -7,7 +11,6 @@ import colors
 import entity_factories as ef
 import husbandry
 
-TANKS = 3
 WHERE = "いけす"
 
 # 養殖：魚を入れると魚が繰り返し増える
@@ -55,19 +58,15 @@ def breed_names_in(items):
     return husbandry.names_in(items, BREED)
 
 
-def place(engine, tank_index, fish_name):
+def place(engine, obj, fish_name):
     sk = getattr(engine.player, "skills", None)   # スキル『漁業』で養殖が速く
     speed = sk.growth_factor("fishery") if sk is not None else 1.0
-    husbandry.place(engine, engine.fishery_tanks, tank_index, fish_name, BREED, WHERE, speed)
+    husbandry.place_obj(engine, obj, fish_name, BREED, WHERE, speed)
 
 
-def collect(engine, tank_index):
-    husbandry.collect(engine, engine.fishery_tanks, tank_index)
+def collect(engine, obj):
+    husbandry.collect_obj(engine, obj)
 
 
-def step_grow(engine):
-    husbandry.step_grow(getattr(engine, "fishery_tanks", []))
-
-
-def label(engine, i):
-    return husbandry.slot_label(engine.fishery_tanks, i, WHERE)
+def label(obj):
+    return husbandry.obj_label(obj, WHERE)

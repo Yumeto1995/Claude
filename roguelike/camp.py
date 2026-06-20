@@ -1,8 +1,10 @@
-"""拠点の設備メニュー制御（テント内で設備の上で Enter したとき開く）。
+"""拠点の設備メニュー制御（設備の上で Enter したとき開く）。
 
 engine.camp_menu（文字列）で開いているメニューを表す：
-  cook → cook_method（料理）/ alchemy（錬金）/ storage（収納）/ farm_plant（畑に植える）
+  cook/cook_method（料理）/ alchemy（錬金）/ storage（収納）/ health（体調）/
+  farm_plant（畑に植える）/ pen_place（牧柵に入れる）/ tank_place（いけす）
 None のときはメニューを閉じてテント内を歩いている状態。
+自由配置の畑・牧柵・いけすは engine.camp_objects[engine.camp_active_pos] を操作する。
 """
 from __future__ import annotations
 
@@ -28,26 +30,14 @@ TITLES = {
     "alchemy": "アイテム錬金",
     "storage": "収納",
     "farm_plant": "畑：種を植える",
-    "ranch": "牧場（畜産）",
-    "ranch_place": "牧場：動物を入れる",
-    "fishery": "漁業（漁・養殖）",
-    "fishery_place": "漁業：養殖する魚を入れる",
+    "pen_place": "牧柵：動物を入れる",
+    "tank_place": "いけす：釣り／養殖",
 }
 
 
-def _slot_options(slots, labels, has_src, place_kind, collect_kind):
-    """牧柵/いけすの各スロットを選択肢にする（空き→置く / 育成中→不可 / 完了→収穫）。"""
-    opts = []
-    for i, s in enumerate(slots):
-        if s is None:
-            opts.append({"text": labels(i), "enabled": has_src,
-                         "kind": place_kind, "data": i})
-        elif s["steps_left"] <= 0:
-            opts.append({"text": labels(i), "enabled": True,
-                         "kind": collect_kind, "data": i})
-        else:
-            opts.append({"text": labels(i), "enabled": False, "kind": "noop"})
-    return opts
+def _active(engine: "Engine"):
+    """メニューで操作中の農場設備オブジェクト（無ければ None）。"""
+    return engine.camp_objects.get(engine.camp_active_pos)
 
 
 def title(engine: "Engine") -> str:
@@ -116,31 +106,17 @@ def options(engine: "Engine") -> List[Dict[str, Any]]:
         opts.append(_BACK)
         return opts
 
-    if menu == "ranch":
-        opts = _slot_options(
-            engine.ranch_pens, lambda i: ranch.label(engine, i),
-            bool(ranch.animal_names_in(items)), "ranch_place", "ranch_collect")
-        opts.append(_BACK)
-        return opts
-
-    if menu == "ranch_place":
-        opts = [{"text": f"{name} を入れる", "enabled": True, "kind": "ranch_do", "data": name}
+    if menu == "pen_place":
+        opts = [{"text": f"{name} を入れる", "enabled": True, "kind": "pen_do", "data": name}
                 for name in ranch.animal_names_in(items)]
         opts.append(_BACK)
         return opts
 
-    if menu == "fishery":
+    if menu == "tank_place":
         bait = sum(1 for it in items if it.name == "エサ")
         opts = [{"text": f"釣る（エサ {bait}）", "enabled": bait > 0, "kind": "fish"}]
-        opts += _slot_options(
-            engine.fishery_tanks, lambda i: fishery.label(engine, i),
-            bool(fishery.breed_names_in(items)), "fishery_place", "fishery_collect")
-        opts.append(_BACK)
-        return opts
-
-    if menu == "fishery_place":
-        opts = [{"text": f"{name} を養殖する", "enabled": True, "kind": "fishery_do", "data": name}
-                for name in fishery.breed_names_in(items)]
+        opts += [{"text": f"{name} を養殖する", "enabled": True, "kind": "tank_do", "data": name}
+                 for name in fishery.breed_names_in(items)]
         opts.append(_BACK)
         return opts
 
@@ -157,21 +133,17 @@ def info(engine: "Engine") -> List[str]:
         if nut.is_good:
             return ["栄養バランス良好＝好調！（攻+1 防+1 スタミナ回復↑）"]
         return ["大きな偏りはなし。バランスよく食べよう。"]
-    if menu == "cooking":
-        return []
     if menu in ("cook", "cook_method"):
         return [f"鍋: {cooking.pot_summary(engine.cook_pot)}"]
     if menu == "storage":
         names = ", ".join(it.name for it in engine.storage) or "空"
         return [f"倉庫({len(engine.storage)}): {names}"]
     if menu == "farm_plant":
-        return [f"畑{engine.camp_active_plot + 1} に植える"]
-    if menu == "ranch":
-        return ["動物を入れて歩くと、卵やミルクを繰り返し収穫できる。"]
-    if menu == "fishery":
-        return ["エサで釣り、釣った魚は養殖いけすで増やせる。フグは要調理。"]
-    if menu in ("ranch_place", "fishery_place"):
-        return [f"スロット{engine.camp_active_plot + 1} に入れる"]
+        return ["畑に植える種を選ぶ。階を潜るうちに育つ。"]
+    if menu == "pen_place":
+        return ["牧柵に動物を入れる。歩くと卵やミルクを繰り返し収穫できる。"]
+    if menu == "tank_place":
+        return ["いけすで釣る、または魚を入れて養殖する。フグは要調理。"]
     return []
 
 
@@ -217,39 +189,31 @@ def select(engine: "Engine") -> None:
             engine.storage.remove(item)
             inv.items.append(item)
     elif kind == "plant":
-        farming.plant(engine, cur["data"], engine.camp_active_plot)
+        obj = _active(engine)
+        if obj is not None:
+            farming.plant_obj(engine, obj, cur["data"])
         engine.camp_menu = None
-    elif kind == "ranch_place":
-        engine.camp_active_plot = cur["data"]
-        engine.camp_menu, engine.camp_cursor = "ranch_place", 0
-    elif kind == "ranch_collect":
-        ranch.collect(engine, cur["data"])
-    elif kind == "ranch_do":
-        ranch.place(engine, engine.camp_active_plot, cur["data"])
-        engine.camp_menu, engine.camp_cursor = "ranch", 0
+    elif kind == "pen_do":
+        obj = _active(engine)
+        if obj is not None:
+            ranch.place(engine, obj, cur["data"])
+        engine.camp_menu = None
     elif kind == "fish":
         fishery.fish(engine)
-    elif kind == "fishery_place":
-        engine.camp_active_plot = cur["data"]
-        engine.camp_menu, engine.camp_cursor = "fishery_place", 0
-    elif kind == "fishery_collect":
-        fishery.collect(engine, cur["data"])
-    elif kind == "fishery_do":
-        fishery.place(engine, engine.camp_active_plot, cur["data"])
-        engine.camp_menu, engine.camp_cursor = "fishery", 0
+        engine.camp_menu = None
+    elif kind == "tank_do":
+        obj = _active(engine)
+        if obj is not None:
+            fishery.place(engine, obj, cur["data"])
+        engine.camp_menu = None
 
 
 def back(engine: "Engine") -> None:
-    menu = engine.camp_menu
-    if menu == "cook_method":
+    if engine.camp_menu == "cook_method":
         engine.camp_menu = "cook"
-    elif menu == "cook":
+    elif engine.camp_menu == "cook":
         engine.cook_pot = []
         engine.camp_menu = None
-    elif menu == "ranch_place":
-        engine.camp_menu = "ranch"
-    elif menu == "fishery_place":
-        engine.camp_menu = "fishery"
-    else:  # alchemy / storage / farm_plant / ranch / fishery
+    else:  # alchemy / storage / health / farm_plant / pen_place / tank_place
         engine.camp_menu = None
     engine.camp_cursor = 0

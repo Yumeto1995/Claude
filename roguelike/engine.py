@@ -41,10 +41,9 @@ class Engine:
         self.camp_menu = None        # None=拠点を歩いている / 文字列=設備メニュー表示中
         self.camp_cursor = 0
         self.cook_pot = []           # 料理の鍋に入れた食材名のリスト
-        self.camp_active_plot = 0    # 畑/牧柵/いけすメニューで操作中のスロット番号
-        self.farm_plots = [None] * 4   # 畑（None=空き / dict=栽培中）
-        self.ranch_pens = [None] * 3   # 牧場の牧柵
-        self.fishery_tanks = [None] * 3  # 漁業の養殖いけす
+        self.camp_objects = {}       # 自由配置の農場設備 (x,y)->{"kind","content"}
+        self.camp_active_pos = None  # メニューで操作中の設備の位置
+        self.camp_build_kind = None  # ビルドモードで建設中の種類（None=非ビルド）
         self.discovered_dishes = set()  # 作ったことのある料理名
         self.storage = []            # 拠点の倉庫（持ち越し収納）
         self.unlocked_zones = set()  # 開放済み区画（"ranch"/"fishery"）
@@ -147,9 +146,7 @@ class Engine:
         # ターンを消費する行動の後だけ敵が動く（モード切替・壁ぶつかりは消費しない）
         if action.consumes_turn and not self.game_over:
             if (self.player.x, self.player.y) != prev:
-                farming.grow_step(self)   # 1歩で作物が育つ
-                ranch.step_grow(self)     # 牧場の産物も育つ
-                fishery.step_grow(self)   # 養殖も育つ
+                self._grow_camp()   # 1歩で畑・牧柵・いけすが育つ
             if not action.is_attack:
                 self.player.fighter.regenerate_stamina()  # 攻撃以外で回復
             # 満腹度を消費。空腹になった瞬間は警告を出す。
@@ -362,6 +359,7 @@ class Engine:
         self.in_camp = True
         self.camp_menu = None
         self.camp_cursor = 0
+        self.camp_build_kind = None
         self.cook_pot = []
 
     def leave_camp(self) -> None:
@@ -373,31 +371,115 @@ class Engine:
         self.message_log.add_message("テントをたたんでダンジョンに戻った。", colors.WELCOME)
 
     def camp_interact(self) -> None:
-        """足元の設備を使う（拠点を歩いているときに Enter）。"""
-        kind = camp_map.STATIONS.get((self.player.x, self.player.y))
-        if kind is None:
-            return
+        """足元の設備を使う（Enter）。住居設備か、配置した農場設備（畑/牧柵/いけす）。"""
+        pos = (self.player.x, self.player.y)
+        kind = camp_map.STATIONS.get(pos)
         if kind == "exit":
             self.leave_camp()
-        elif kind == "cooking":
+            return
+        if kind == "cooking":
             self.camp_menu, self.camp_cursor, self.cook_pot = "cook", 0, []
-        elif kind == "alchemy":
-            self.camp_menu, self.camp_cursor = "alchemy", 0
-        elif kind == "storage":
-            self.camp_menu, self.camp_cursor = "storage", 0
-        elif kind == "health":
-            self.camp_menu, self.camp_cursor = "health", 0
-        elif kind.startswith("farm"):
-            farming.interact_plot(self, int(kind[4:]))
-        elif kind in ("ranch", "fishery"):
-            if kind in self.unlocked_zones:
-                self.camp_menu, self.camp_cursor = kind, 0
+            return
+        if kind in ("alchemy", "storage", "health"):
+            self.camp_menu, self.camp_cursor = kind, 0
+            return
+        obj = self.camp_objects.get(pos)
+        if obj is not None:
+            self._interact_farm_object(pos, obj)
+
+    def _interact_farm_object(self, pos, obj) -> None:
+        """配置した畑/牧柵/いけすを操作（空→入れる / 育成中→状態 / 完了→収穫）。"""
+        self.camp_active_pos = pos
+        kind = obj["kind"]
+        content = obj["content"]
+        if kind == "farm":
+            if content is None:
+                if not farming.seed_names_in(self.player.inventory.items):
+                    self.message_log.add_message("植える種を持っていない。", colors.NO_EFFECT)
+                    return
+                self.camp_menu, self.camp_cursor = "farm_plant", 0
+            elif content["steps_left"] <= 0:
+                farming.harvest_obj(self, obj)
             else:
-                label = camp_map.STATION_LABELS[kind]
-                key = "牧場の鍵" if kind == "ranch" else "漁業の鍵"
+                self.message_log.add_message(farming.plot_label(obj), colors.NO_EFFECT)
+        elif kind == "pen":
+            if content is None:
+                if not ranch.animal_names_in(self.player.inventory.items):
+                    self.message_log.add_message("入れる動物がいない。", colors.NO_EFFECT)
+                    return
+                self.camp_menu, self.camp_cursor = "pen_place", 0
+            elif content["steps_left"] <= 0:
+                ranch.collect(self, obj)
+            else:
+                self.message_log.add_message(ranch.label(obj), colors.NO_EFFECT)
+        elif kind == "tank":
+            if content is None:
+                self.camp_menu, self.camp_cursor = "tank_place", 0
+            elif content["steps_left"] <= 0:
+                fishery.collect(self, obj)
+            else:
+                self.message_log.add_message(fishery.label(obj), colors.NO_EFFECT)
+
+    def _grow_camp(self) -> None:
+        """1歩あるくごとに、配置した農場設備の中身を育てる。"""
+        for obj in self.camp_objects.values():
+            c = obj.get("content")
+            if c is not None and c["steps_left"] > 0:
+                c["steps_left"] -= 1
+
+    def camp_build_op(self, op: str) -> None:
+        """建設モードの操作。cycle=種類切替 / place=設置 / remove=撤去 / exit=終了。"""
+        kinds = ["farm", "pen", "tank"]
+        if op == "cycle":
+            if self.camp_build_kind is None:
+                self.camp_build_kind = kinds[0]
+            else:
+                i = kinds.index(self.camp_build_kind) + 1
+                self.camp_build_kind = kinds[i] if i < len(kinds) else None
+            if self.camp_build_kind is not None:
+                label, cost = camp_map.BUILDABLE[self.camp_build_kind][:2]
                 self.message_log.add_message(
-                    f"{label}はまだ使えない。『{key}』を見つけて開放しよう。", colors.NO_EFFECT
+                    f"建設：{label}（{cost}）。Enter=設置 / b=切替 / x=撤去 / ESC=終了",
+                    colors.WELCOME,
                 )
+            else:
+                self.message_log.add_message("建設モードを終了した。", colors.NO_EFFECT)
+        elif op == "exit":
+            self.camp_build_kind = None
+        elif op == "place" and self.camp_build_kind is not None:
+            self.camp_build(self.camp_build_kind)
+        elif op == "remove":
+            self.camp_remove()
+
+    def camp_build(self, kind: str) -> None:
+        """足元の空きマスに農場設備を建てる（経験値を支払う）。"""
+        pos = (self.player.x, self.player.y)
+        if pos in camp_map.STATIONS or pos in self.camp_objects:
+            self.message_log.add_message("ここには建てられない。", colors.NO_EFFECT)
+            return
+        label, cost, _spr, zone = camp_map.BUILDABLE[kind]
+        if zone is not None and zone not in self.unlocked_zones:
+            key = "牧場の鍵" if zone == "ranch" else "漁業の鍵"
+            self.message_log.add_message(
+                f"{label}はまだ建てられない。『{key}』で区画を開放しよう。", colors.NO_EFFECT
+            )
+            return
+        if not self.player.level.spend_xp(cost, self.player.fighter):
+            self.message_log.add_message("お金（経験値）が足りない。", colors.NO_EFFECT)
+            return
+        self.camp_objects[pos] = {"kind": kind, "content": None}
+        self.message_log.add_message(f"{label}を建てた（-{cost}）。", colors.ITEM)
+
+    def camp_remove(self) -> None:
+        """足元の農場設備を撤去する（中身があっても消える）。"""
+        pos = (self.player.x, self.player.y)
+        obj = self.camp_objects.get(pos)
+        if obj is None:
+            self.message_log.add_message("ここに撤去できる設備はない。", colors.NO_EFFECT)
+            return
+        label = camp_map.BUILDABLE[obj["kind"]][0]
+        del self.camp_objects[pos]
+        self.message_log.add_message(f"{label}を撤去した。", colors.ITEM)
 
     def _tick_status_effects(self) -> None:
         """料理バフなどの一時効果を1ターン分減らし、切れたら外す。"""
