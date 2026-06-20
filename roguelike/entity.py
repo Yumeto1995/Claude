@@ -36,6 +36,7 @@ class Entity:
         equippable: Optional["Equippable"] = None,
         equipment: Optional["Equipment"] = None,
         item_category: Optional["ItemCategory"] = None,
+        count: int = 1,
         skills=None,
         dialogue=None,
     ):
@@ -77,6 +78,8 @@ class Entity:
             self.equipment.entity = self
         # 持ち物画面の分類の明示指定（素材・大切なもの用。武器/防具/消費は自動判定）
         self.item_category = item_category
+        # スタック数（矢などの弾用。通常アイテムは 1）。
+        self.count = count
         # 一時的な状態効果（料理バフなど）。主にプレイヤーが使う。
         self.status_effects = []
         # 村のNPC用のセリフ（リスト）。NPC以外は None。

@@ -399,3 +399,116 @@ class BumpAction(ActionWithDirection):
         # 実際に行った行動（攻撃 or 移動）の結果を引き継ぐ
         self.consumes_turn = sub.consumes_turn
         self.is_attack = sub.is_attack
+
+
+def _find_ammo(entity: Entity):
+    """持ち物の中から、残りのある矢（AMMO）スタックを返す。無ければ None。"""
+    inv = getattr(entity, "inventory", None)
+    if inv is None:
+        return None
+    for it in inv.items:
+        if item_category.category_of(it) == item_category.ItemCategory.AMMO and it.count > 0:
+            return it
+    return None
+
+
+class ToggleFireModeAction(Action):
+    """射撃モードの切替。オン時は次の方向キーで矢を1本撃つ。弓と矢が無ければ入れない。"""
+
+    consumes_turn = False
+
+    def perform(self, engine: Engine, entity: Entity) -> None:
+        if getattr(engine, "fire_mode", False):
+            engine.fire_mode = False
+            return
+        eq = getattr(entity, "equipment", None)
+        if eq is None or eq.ranged is None:
+            engine.message_log.add_message("弓を装備していない。", colors.NO_EFFECT)
+            return
+        if _find_ammo(entity) is None:
+            engine.message_log.add_message("矢を持っていない。", colors.NO_EFFECT)
+            return
+        engine.fire_mode = True
+        engine.message_log.add_message("射撃方向を選択（ESC で中止）。", colors.WELCOME)
+
+
+class RangedAttackAction(ActionWithDirection):
+    """装備中の弓で矢を1本撃つ。(dx, dy) 方向の直線上で最初に当たった敵に命中。"""
+
+    is_attack = True
+
+    def perform(self, engine: Engine, entity: Entity) -> None:
+        engine.fire_mode = False
+        eq = getattr(entity, "equipment", None)
+        bow = eq.ranged if eq is not None else None
+        ammo = _find_ammo(entity)
+        f = entity.fighter
+        fire_cost = bow.equippable.stamina_cost if (bow and bow.equippable) else 0
+
+        # 前提チェック（どれか欠けたらターン消費せず中止）
+        if bow is None or bow.equippable is None:
+            engine.message_log.add_message("弓を装備していない。", colors.NO_EFFECT)
+            self.consumes_turn = False
+            return
+        if ammo is None:
+            engine.message_log.add_message("矢を持っていない。", colors.NO_EFFECT)
+            self.consumes_turn = False
+            return
+        if self.dx == 0 and self.dy == 0:
+            self.consumes_turn = False
+            return
+        if f is not None and f.uses_stamina and f.stamina < fire_cost:
+            engine.message_log.add_message("スタミナが足りない！", colors.NO_EFFECT)
+            self.consumes_turn = False
+            return
+
+        # コスト：スタミナと矢を1本消費
+        if f is not None and f.uses_stamina:
+            f.stamina = max(0, f.stamina - fire_cost)
+        ammo.count -= 1
+        if ammo.count <= 0 and entity.inventory is not None:
+            entity.inventory.items.remove(ammo)
+
+        # 直線を走査：壁/マップ端で停止、最初の戦える相手に命中
+        gm = engine.game_map
+        max_range = bow.equippable.max_range or 1
+        x, y = entity.x, entity.y
+        path = []
+        target = None
+        for _ in range(max_range):
+            x += self.dx
+            y += self.dy
+            if not gm.in_bounds(x, y) or not gm.tiles["walkable"][x, y]:
+                break
+            path.append((x, y))
+            blocker = gm.get_blocking_entity_at(x, y)
+            if blocker is not None and blocker.fighter is not None:
+                target = blocker
+                break
+
+        # 矢の軌道エフェクト（Renderer が再生）
+        engine.pending_fx.append(("arrow", entity.x, entity.y, self.dx, self.dy, list(path)))
+
+        if target is None:
+            engine.message_log.add_message(f"{entity.name} の矢は外れた。", colors.NO_EFFECT)
+            return
+
+        # ダメージ（近接と同じ作法。弓の power_bonus を素の攻撃力に加える）
+        base = (f.base_power if f is not None else 0) + bow.equippable.power_bonus
+        damage = base - target.fighter.defense
+        if target.fighter.is_hungry:
+            damage = int(damage * HUNGER_DAMAGE_MULT)
+        damage = max(1, damage)
+        crit = False
+        sk = getattr(entity, "skills", None)
+        if sk is not None and sk.roll(sk.crit_chance()):
+            damage = int(damage * 1.5)
+            crit = True
+        attack_color = colors.PLAYER_ATK if entity is engine.player else colors.ENEMY_ATK
+        prefix = "会心の一撃！ " if crit else ""
+        engine.message_log.add_message(
+            f"{prefix}{entity.name} の矢が {target.name} に命中 → {damage} ダメージ", attack_color
+        )
+        engine.pending_fx.append(("flash", target))
+        engine.pending_fx.append(("popup", target.x, target.y, f"-{damage}", (255, 240, 140)))
+        combat.inflict_damage(engine, target, damage, attacker=entity)

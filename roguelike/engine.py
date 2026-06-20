@@ -27,6 +27,7 @@ class Engine:
         self.height = height
         self.game_over = False
         self.attack_mode = False     # True なら方向キーで攻撃、False なら移動
+        self.fire_mode = False       # True なら次の方向キーで弓を撃つ（射撃モード）
         self.inventory_open = False  # 持ち物メニューを開いているか
         self.inventory_category = 0  # 持ち物メニューで選択中の分類タブ
         self.inventory_cursor = 0    # 持ち物メニューで選択中の行（カーソル位置）
@@ -165,11 +166,15 @@ class Engine:
         """短剣と革の鎧を持たせて装備させる（開始時）。"""
         dagger = entity_factories.dagger.spawn(0, 0)
         armor = entity_factories.leather_armor.spawn(0, 0)
+        bow = entity_factories.bow.spawn(0, 0)                  # 遠距離武器
+        arrows = entity_factories.arrow.spawn(0, 0)             # 矢（スタック）
+        arrows.count = 15
         proof = entity_factories.adventurers_proof.spawn(0, 0)  # 大切なもの
         tent = entity_factories.magic_tent.spawn(0, 0)          # 大切なもの（拠点へ）
-        self.player.inventory.items.extend([dagger, armor, proof, tent])
+        self.player.inventory.items.extend([dagger, armor, bow, arrows, proof, tent])
         self.player.equipment.weapon = dagger
         self.player.equipment.armor = armor
+        self.player.equipment.ranged = bow
         # 合成・栽培を試せるよう、素材と種を少し持たせておく
         for _ in range(3):
             self.player.inventory.items.append(

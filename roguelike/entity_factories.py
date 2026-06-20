@@ -94,6 +94,23 @@ sword = Entity(
     equippable=Equippable(EquipmentType.WEAPON, power_bonus=6, stamina_cost=36),
 )
 
+# --- 遠距離武器・弾 ---
+# 弓：ranged 枠に装備（近接武器と両立）。矢を1本消費して直線上の最初の敵を射る。
+bow = Entity(
+    sprite="bow",
+    name="弓",
+    blocks_movement=False,
+    equippable=Equippable(EquipmentType.RANGED, power_bonus=4, stamina_cost=20, max_range=6),
+)
+
+# 矢：スタックする弾。count 本まとめて1スロット。撃つたびに1減り、0で尽きる。
+arrow = Entity(
+    sprite="arrow",
+    name="矢",
+    blocks_movement=False,
+    item_category=ItemCategory.AMMO,
+)
+
 # 防具：stamina_cost は攻撃時の追加消費（重い防具ほど攻撃が重くなる）。
 leather_armor = Entity(
     sprite="leather_armor",

@@ -21,12 +21,14 @@ from actions import (
     MoveInventoryCursorAction,
     MovementAction,
     PickupAction,
+    RangedAttackAction,
     ShopBuyAction,
     ShopCloseAction,
     ShopMoveCursorAction,
     SkillNavAction,
     SkillUnlockAction,
     ToggleAttackModeAction,
+    ToggleFireModeAction,
     ToggleInventoryAction,
     ToggleSkillTreeAction,
     UseItemAction,
@@ -111,6 +113,15 @@ def dispatch_event(event: pygame.event.Event, engine: "Engine") -> Optional[Acti
         if engine.inventory_open:
             return _inventory_keys(key, engine)
 
+        # 射撃モード中：方向キーで矢を発射、ESC/f で中止（他キーは無視）
+        if getattr(engine, "fire_mode", False):
+            if key in _DIRECTIONS:
+                dx, dy = _DIRECTIONS[key]
+                return RangedAttackAction(dx, dy)
+            if key in (pygame.K_ESCAPE, pygame.K_f):
+                return ToggleFireModeAction()
+            return None
+
         # 攻撃モードの方向キーは1押し1攻撃（連打防止のため単発で扱う）
         if key in _DIRECTIONS and engine.attack_mode:
             dx, dy = _DIRECTIONS[key]
@@ -125,6 +136,8 @@ def dispatch_event(event: pygame.event.Event, engine: "Engine") -> Optional[Acti
             return WaitAction()                 # 足踏み
         if key == pygame.K_SPACE:
             return ToggleAttackModeAction()      # 攻撃/移動モード切替
+        if key == pygame.K_f:
+            return ToggleFireModeAction()        # 射撃モード（弓で矢を撃つ）
         if key == pygame.K_i:
             return ToggleInventoryAction()       # 持ち物を開く
         if key == pygame.K_t:
@@ -203,7 +216,7 @@ def held_movement_action(engine: "Engine") -> Optional[Action]:
         if (getattr(engine, "dialogue", None) is not None
                 or getattr(engine, "shop_kind", None) is not None):
             return None  # 会話中・買い物中は歩けない
-    elif engine.attack_mode or engine.inventory_open:
+    elif engine.attack_mode or engine.inventory_open or getattr(engine, "fire_mode", False):
         return None
     # 押されている方向キーを合成（↑＋→ などで斜め移動）
     keys = pygame.key.get_pressed()

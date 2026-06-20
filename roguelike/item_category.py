@@ -17,7 +17,8 @@ if TYPE_CHECKING:
 class ItemCategory(Enum):
     CONSUMABLE = auto()  # 消費アイテム
     MATERIAL = auto()    # 素材アイテム
-    WEAPON = auto()      # 武器
+    WEAPON = auto()      # 武器（近接・遠距離）
+    AMMO = auto()        # 矢などの弾
     ARMOR = auto()       # 防具
     KEY = auto()         # 大切なもの
 
@@ -26,6 +27,7 @@ LABELS = {
     ItemCategory.CONSUMABLE: "消費",
     ItemCategory.MATERIAL: "素材",
     ItemCategory.WEAPON: "武器",
+    ItemCategory.AMMO: "矢",
     ItemCategory.ARMOR: "防具",
     ItemCategory.KEY: "大切なもの",
 }
@@ -35,6 +37,7 @@ ORDER: List[ItemCategory] = [
     ItemCategory.CONSUMABLE,
     ItemCategory.MATERIAL,
     ItemCategory.WEAPON,
+    ItemCategory.AMMO,
     ItemCategory.ARMOR,
     ItemCategory.KEY,
 ]
@@ -46,8 +49,8 @@ def category_of(item: "Entity") -> ItemCategory:
     if explicit is not None:
         return explicit
     if item.equippable is not None:
-        if item.equippable.equipment_type == EquipmentType.WEAPON:
-            return ItemCategory.WEAPON
+        if item.equippable.equipment_type in (EquipmentType.WEAPON, EquipmentType.RANGED):
+            return ItemCategory.WEAPON  # 弓も武器タブにまとめる
         return ItemCategory.ARMOR
     if item.consumable is not None:
         return ItemCategory.CONSUMABLE

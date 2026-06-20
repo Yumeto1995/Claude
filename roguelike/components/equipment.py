@@ -16,10 +16,14 @@ class Equipment:
     entity: "Entity"
 
     def __init__(
-        self, weapon: Optional["Entity"] = None, armor: Optional["Entity"] = None
+        self,
+        weapon: Optional["Entity"] = None,
+        armor: Optional["Entity"] = None,
+        ranged: Optional["Entity"] = None,
     ):
-        self.weapon = weapon  # 装備中の武器（Entity）or None
+        self.weapon = weapon  # 装備中の近接武器（Entity）or None
         self.armor = armor    # 装備中の防具（Entity）or None
+        self.ranged = ranged  # 装備中の遠距離武器＝弓（Entity）or None
 
     @property
     def power_bonus(self) -> int:
@@ -38,15 +42,17 @@ class Equipment:
         return total
 
     def item_is_equipped(self, item: "Entity") -> bool:
-        return item is self.weapon or item is self.armor
+        return item is self.weapon or item is self.armor or item is self.ranged
 
     def toggle_equip(self, item: "Entity", engine: "Engine") -> None:
         """アイテムを装備/解除する（同じ枠に別物があれば付け替え）。"""
-        slot = (
-            "weapon"
-            if item.equippable.equipment_type == EquipmentType.WEAPON
-            else "armor"
-        )
+        etype = item.equippable.equipment_type
+        if etype == EquipmentType.WEAPON:
+            slot = "weapon"
+        elif etype == EquipmentType.RANGED:
+            slot = "ranged"
+        else:
+            slot = "armor"
         if getattr(self, slot) is item:
             setattr(self, slot, None)
             engine.message_log.add_message(f"{item.name} を外した。", colors.ITEM)

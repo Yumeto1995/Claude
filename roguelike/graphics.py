@@ -102,6 +102,22 @@ class PopupAnim(_TimedFx):
         self.surf = None  # 初回描画時にレンダリングしてキャッシュ
 
 
+class ArrowAnim(_TimedFx):
+    """放たれた矢が始点から着弾/停止点まで直線に飛ぶエフェクト。"""
+
+    DURATION = 0.18
+
+    def __init__(self, x0: int, y0: int, dx: int, dy: int, path):
+        super().__init__()
+        self.x0 = x0
+        self.y0 = y0
+        self.dx = dx
+        self.dy = dy
+        ex, ey = path[-1] if path else (x0, y0)  # 最遠到達タイル
+        self.ex, self.ey = ex, ey
+        self.x, self.y = ex, ey  # 視界判定用（終点）
+
+
 ASSETS_DIR = os.path.join(os.path.dirname(__file__), "assets")
 
 # スプライトのキー → 仮タイルの色（assets に PNG が無いとき使う）
@@ -119,6 +135,8 @@ PLACEHOLDER_COLORS: Dict[str, tuple] = {
     "scroll_confuse": (170, 120, 255),
     "dagger": (200, 200, 210),
     "sword": (230, 230, 245),
+    "bow": (170, 130, 70),
+    "arrow": (210, 200, 180),
     "leather_armor": (160, 110, 60),
     "chain_mail": (150, 160, 180),
     "material": (120, 180, 120),
@@ -1117,7 +1135,8 @@ class Renderer:
                 if icon is not None:
                     screen.blit(icon, (x + 20, row_y + (self.ROW_H - TILE_SIZE) // 2))
                 name_color = self.TEXT_GOLD if i == cursor else self.TEXT_MAIN
-                self._text(item.name, x + 62, row_y + 7, color=name_color)
+                disp_name = item.name if getattr(item, "count", 1) <= 1 else f"{item.name} ×{item.count}"
+                self._text(disp_name, x + 62, row_y + 7, color=name_color)
                 # 右端：装備中バッジ → 性能（控えめ色）の順に右詰め
                 right = x + width - 16
                 if equipment.item_is_equipped(item):
@@ -1152,6 +1171,8 @@ class Renderer:
                 parts.append(f"ST+{eq.stamina_cost}")
             else:
                 parts.append(f"ST{eq.stamina_cost}")
+        if getattr(eq, "max_range", 0):
+            parts.append(f"射程{eq.max_range}")
         return "  (" + " ".join(parts) + ")" if parts else ""
 
     # 1歩(1マス)の中の脚サイクル：踏み出し→足をそろえる(passing)。
@@ -1248,6 +1269,8 @@ class Renderer:
                 self.fx.append(FlashAnim(fx[1]))
             elif kind == "popup":
                 self.fx.append(PopupAnim(*fx[1:]))
+            elif kind == "arrow":
+                self.fx.append(ArrowAnim(*fx[1:]))
 
         # --- 位置スムージング：各エンティティの描画位置を目標タイルへ寄せる ---
         ents = list(engine.game_map.entities)
@@ -1327,6 +1350,9 @@ class Renderer:
             t = fx.progress()
             if t is None:
                 continue
+            if isinstance(fx, ArrowAnim):
+                self._draw_arrow(fx, t, gm, cam_x, cam_y)
+                continue
             if not gm.in_bounds(fx.x, fx.y) or not gm.visible[fx.x, fx.y]:
                 continue  # 視界外の戦闘（同士討ち等）は描かない
             sx = fx.x * TILE_SIZE - cam_x
@@ -1371,6 +1397,23 @@ class Renderer:
         y = sy - 8 - int(fx.RISE * t)
         self.screen.blit(label, (x, y))
 
+    def _draw_arrow(self, fx, t: float, gm, cam_x: float, cam_y: float) -> None:
+        """矢が始点→着弾点を直線に飛ぶ。現在位置のタイルが見えている時だけ描く。"""
+        cx = fx.x0 + (fx.ex - fx.x0) * t   # タイル座標で線形補間
+        cy = fx.y0 + (fx.ey - fx.y0) * t
+        ti, tj = int(round(cx)), int(round(cy))
+        if not gm.in_bounds(ti, tj) or not gm.visible[ti, tj]:
+            return
+        sx = cx * TILE_SIZE - cam_x + TILE_SIZE / 2
+        sy = cy * TILE_SIZE - cam_y + TILE_SIZE / 2
+        norm = math.hypot(fx.dx, fx.dy) or 1.0
+        ux, uy = fx.dx / norm, fx.dy / norm
+        half = TILE_SIZE * 0.30
+        tail = (sx - ux * half, sy - uy * half)
+        head = (sx + ux * half, sy + uy * half)
+        pygame.draw.line(self.screen, (240, 228, 180), tail, head, 3)
+        pygame.draw.circle(self.screen, (255, 250, 210), (int(head[0]), int(head[1])), 3)
+
     @staticmethod
     def _ratio_color(ratio: float) -> tuple:
         """残量ゲージの色（高=緑 / 中=黄 / 低=赤）。"""
@@ -1414,7 +1457,9 @@ class Renderer:
             rx = width - 14
             rx -= self._draw_chip(f"地下 {engine.current_floor} 階", rx, y - 2,
                                   colors.DESCEND, right_align=True) + 8
-            if engine.attack_mode:
+            if getattr(engine, "fire_mode", False):
+                self._draw_chip("射撃方向？", rx, y - 2, (255, 205, 90), right_align=True)
+            elif engine.attack_mode:
                 self._draw_chip("攻撃モード", rx, y - 2, (255, 130, 130), right_align=True)
             else:
                 self._draw_chip("移動モード", rx, y - 2, (150, 210, 150), right_align=True)
