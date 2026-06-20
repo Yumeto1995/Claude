@@ -33,6 +33,12 @@ FOOD_NUTRITION: Dict[str, Dict[str, int]] = {
     "大魚":     {"protein": 34, "fat": 14, "iron": 8, "vitB": 8, "calcium": 8},
     "フグ":     {"protein": 24, "calcium": 6, "tox": 18},
     "携帯食料": {"carb": 22, "protein": 8, "fat": 10, "vitB": 2},
+    # 追加食材（栄養ニッチ）
+    "イモ":     {"carb": 24, "vitC": 8, "fat": 2},          # 炭水化物の塊
+    "果実":     {"vitC": 22, "carb": 14, "vitA": 6},        # 2つめのビタミンC源
+    "貝":       {"calcium": 16, "iron": 12, "protein": 14, "tox": 3},  # カルシウム＋鉄
+    "チーズ":   {"calcium": 22, "fat": 16, "protein": 12},  # 日持ちするカルシウム源
+    "蜂蜜":     {"carb": 28},                                # 超日持ちの炭水化物
 }
 
 # 蓄積ストアの範囲としきい値

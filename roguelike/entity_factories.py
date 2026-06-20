@@ -157,6 +157,28 @@ meat = Entity(
     sprite="food", name="肉", blocks_movement=False,
     consumable=FoodConsumable(amount=20), shelf_life=120,  # 生肉。傷みやすい
 )
+
+# 追加食材（栄養ニッチを埋める。日持ちは食材ごとに差をつける）
+potato = Entity(
+    sprite="food", name="イモ", blocks_movement=False,
+    consumable=FoodConsumable(amount=30), shelf_life=350,  # 炭水化物源・日持ち長め
+)
+fruit = Entity(
+    sprite="food", name="果実", blocks_movement=False,
+    consumable=FoodConsumable(amount=18), shelf_life=90,   # ビタミンC源・傷みやすい
+)
+shellfish = Entity(
+    sprite="food", name="貝", blocks_movement=False,
+    consumable=FoodConsumable(amount=16), shelf_life=100,  # カルシウム＋鉄
+)
+cheese = Entity(
+    sprite="food", name="チーズ", blocks_movement=False,
+    consumable=FoodConsumable(amount=24), shelf_life=300,  # 日持ちするカルシウム源
+)
+honey = Entity(
+    sprite="food", name="蜂蜜", blocks_movement=False,
+    consumable=FoodConsumable(amount=22), shelf_life=800,  # 超日持ちの炭水化物
+)
 # 毒キノコ：生食はできない素材。料理して毒を抜けば食材になる（生焼けだと食中毒）
 poison_mushroom = Entity(
     sprite="material", name="毒キノコ", blocks_movement=False,
