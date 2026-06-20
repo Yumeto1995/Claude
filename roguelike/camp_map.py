@@ -18,6 +18,7 @@ STATIONS = {
     (3, 3): "storage",
     (5, 3): "cooking",
     (7, 3): "alchemy",
+    (9, 3): "health",
     # 畑区画（右上）
     (16, 3): "farm0",
     (18, 3): "farm1",
@@ -44,6 +45,7 @@ STATION_LABELS = {
     "storage": "収納",
     "cooking": "料理（かまど）",
     "alchemy": "アイテム錬金",
+    "health": "体調を調べる",
     "ranch": "牧場",
     "fishery": "漁業",
     "exit": "ダンジョンに戻る",

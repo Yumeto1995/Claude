@@ -13,6 +13,7 @@ import cooking
 import crafting
 import farming
 import fishery
+import nutrition
 import ranch
 
 if TYPE_CHECKING:
@@ -21,6 +22,7 @@ if TYPE_CHECKING:
 _BACK: Dict[str, Any] = {"text": "とじる", "enabled": True, "kind": "back"}
 
 TITLES = {
+    "health": "体調を調べる（栄養状態）",
     "cook": "料理：鍋に食材を入れる",
     "cook_method": "料理：調理法を選ぶ",
     "alchemy": "アイテム錬金",
@@ -55,6 +57,16 @@ def title(engine: "Engine") -> str:
 def options(engine: "Engine") -> List[Dict[str, Any]]:
     menu = engine.camp_menu
     items = engine.player.inventory.items
+
+    if menu == "health":
+        nut = engine.player.nutrition
+        opts = [
+            {"text": f"{nutrition.NUTRIENTS[k]}：{nut.status_label(k)}",
+             "enabled": False, "kind": "noop"}
+            for k in nutrition.KEYS
+        ]
+        opts.append(_BACK)
+        return opts
 
     if menu == "alchemy":
         opts = [
@@ -137,6 +149,14 @@ def options(engine: "Engine") -> List[Dict[str, Any]]:
 
 def info(engine: "Engine") -> List[str]:
     menu = engine.camp_menu
+    if menu == "health":
+        nut = engine.player.nutrition
+        if nut.deficient:
+            syms = "・".join(nutrition.SYMPTOMS[k] for k in nutrition.KEYS if k in nut.deficient)
+            return [f"気になる症状: {syms}", "不足している栄養を含む食事で改善する。"]
+        if nut.is_good:
+            return ["栄養バランス良好＝好調！（攻+1 防+1 スタミナ回復↑）"]
+        return ["大きな偏りはなし。バランスよく食べよう。"]
     if menu == "cooking":
         return []
     if menu in ("cook", "cook_method"):

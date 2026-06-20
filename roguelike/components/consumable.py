@@ -4,6 +4,7 @@ from typing import TYPE_CHECKING, Optional
 
 import colors
 import combat
+import nutrition
 
 if TYPE_CHECKING:
     from engine import Engine
@@ -73,6 +74,9 @@ class FoodConsumable(Consumable):
             engine.message_log.add_message("満腹で食べられない。", colors.NO_EFFECT)
             return False
         restored = f.restore_satiety(self.amount)
+        nut = getattr(consumer, "nutrition", None)
+        if nut is not None:                      # 隠し栄養：この食材の栄養を蓄積
+            nut.eat(nutrition.profile_for(self.entity.name))
         engine.message_log.add_message(
             f"{self.entity.name} を食べた。満腹度が {restored} 回復した。", colors.HEAL
         )
@@ -82,10 +86,11 @@ class FoodConsumable(Consumable):
 class FoodDishConsumable(Consumable):
     """料理：食べると満腹度変化＋HP回復＋一時効果（複数可。食中毒など負の効果も）。"""
 
-    def __init__(self, satiety: int = 0, heal: int = 0, effects=None):
+    def __init__(self, satiety: int = 0, heal: int = 0, effects=None, nutrients=None):
         self.satiety = satiety      # 満腹度の変化（食中毒では負）
         self.heal = heal
         self.effects = effects or []  # status.StatusEffect のリスト
+        self.nutrients = nutrients or {}  # 隠し栄養への寄与（食材合計）
 
     def activate(self, engine: "Engine", consumer: "Entity") -> bool:
         import copy
@@ -99,6 +104,9 @@ class FoodDishConsumable(Consumable):
             f.hp += self.heal
         for eff in self.effects:
             consumer.status_effects.append(copy.deepcopy(eff))
+        nut = getattr(consumer, "nutrition", None)
+        if nut is not None and self.nutrients:   # 隠し栄養：料理の栄養を蓄積
+            nut.eat(self.nutrients)
 
         names = "・".join(e.name for e in self.effects)
         msg = f"{self.entity.name} を食べた。"

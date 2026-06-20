@@ -20,6 +20,7 @@ from components.inventory import Inventory
 from components.level import Level
 from entity import Entity
 from item_category import ItemCategory
+from nutrition import Nutrition
 from skills import Skills
 
 player = Entity(
@@ -31,6 +32,7 @@ player = Entity(
     inventory=Inventory(capacity=12),
     equipment=Equipment(),
     skills=Skills(),
+    nutrition=Nutrition(),
 )
 
 # ゴブリンは強化学習の方策（rl/policy.npz）で動く。

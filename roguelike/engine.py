@@ -13,7 +13,7 @@ import ranch
 import shop
 import village_map
 from actions import EscapeAction
-from fov import compute_fov
+from fov import DEFAULT_RADIUS, compute_fov
 from input_handlers import dispatch_event
 from message_log import MessageLog
 from procgen import generate_dungeon, nonsafe_connected
@@ -159,6 +159,7 @@ class Engine:
                     "おなかが空いた！ 攻撃が重くなり、被ダメージも増える…", colors.PLAYER_DIE
                 )
             self._tick_status_effects()
+            self._tick_nutrition()     # 隠し栄養の減衰＋欠乏症状
             self.update_fov()          # プレイヤーが動いたので視界更新
             self.handle_enemy_turns()  # 敵は視界内のものだけ動く
 
@@ -382,6 +383,8 @@ class Engine:
             self.camp_menu, self.camp_cursor = "alchemy", 0
         elif kind == "storage":
             self.camp_menu, self.camp_cursor = "storage", 0
+        elif kind == "health":
+            self.camp_menu, self.camp_cursor = "health", 0
         elif kind.startswith("farm"):
             farming.interact_plot(self, int(kind[4:]))
         elif kind in ("ranch", "fishery"):
@@ -404,6 +407,22 @@ class Engine:
                     f"{eff.name} の効果が切れた。", colors.NO_EFFECT
                 )
 
+    def _tick_nutrition(self) -> None:
+        """隠し栄養を1ターン減衰させ、欠乏の発症/回復を症状メッセージで知らせる。"""
+        nut = getattr(self.player, "nutrition", None)
+        if nut is None:
+            return
+        nut.decay()
+        for _key, kind, symptom in nut.update_symptoms():
+            if kind == "onset":
+                self.message_log.add_message(
+                    f"栄養が偏っている…『{symptom}』の症状が出てきた。", colors.PLAYER_DIE
+                )
+            else:
+                self.message_log.add_message(
+                    f"栄養が戻り『{symptom}』が治まった。", colors.HEAL
+                )
+
     def item_under_player(self):
         """プレイヤーが乗っている床のアイテムを返す。なければ None。"""
         for ent in self.game_map.entities:
@@ -418,8 +437,11 @@ class Engine:
     def update_fov(self) -> None:
         """プレイヤー位置から視界を再計算し、探索済みに反映する。"""
         gm = self.game_map
+        nut = getattr(self.player, "nutrition", None)
+        pen = nut.fov_penalty if nut is not None else 0   # 夜盲症で視界が狭まる
+        radius = max(2, DEFAULT_RADIUS - pen)
         gm.visible = compute_fov(
-            gm.tiles["transparent"], gm.rooms, self.player.x, self.player.y
+            gm.tiles["transparent"], gm.rooms, self.player.x, self.player.y, radius
         )
         gm.explored |= gm.visible
 

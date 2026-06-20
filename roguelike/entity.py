@@ -38,6 +38,7 @@ class Entity:
         item_category: Optional["ItemCategory"] = None,
         count: int = 1,
         skills=None,
+        nutrition=None,
         dialogue=None,
     ):
         self.x = x
@@ -62,6 +63,10 @@ class Entity:
             self.skills.entity = self
             if self.level is not None:
                 self.level.skills = self.skills
+        # 隠し栄養状態（プレイヤーのみ）。食事で蓄積し、偏ると欠乏症状。
+        self.nutrition = nutrition
+        if self.nutrition is not None:
+            self.nutrition.entity = self
         # アイテム用：使用効果。プレイヤー用：持ち物。
         self.consumable = consumable
         if self.consumable is not None:

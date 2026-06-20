@@ -154,6 +154,7 @@ PLACEHOLDER_COLORS: Dict[str, tuple] = {
     "st_ranch": (200, 160, 110),
     "st_fishery": (90, 150, 210),
     "st_exit": (120, 220, 255),
+    "st_health": (225, 120, 120),
     "farm_empty": (110, 80, 55),
     "farm_grow": (120, 170, 90),
     "farm_ready": (230, 220, 90),

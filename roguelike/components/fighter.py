@@ -65,6 +65,9 @@ class Fighter:
         sk = getattr(self.entity, "skills", None)   # スキル『防御』
         if sk is not None:
             total += sk.defense_bonus
+        nut = getattr(self.entity, "nutrition", None)   # 隠し栄養（壊血病/骨弱り/好調）
+        if nut is not None:
+            total += nut.defense_mod
         return total
 
     @property
@@ -76,6 +79,9 @@ class Fighter:
         sk = getattr(self.entity, "skills", None)   # スキル『攻撃』
         if sk is not None:
             total += sk.power_bonus
+        nut = getattr(self.entity, "nutrition", None)   # 隠し栄養（筋力低下/好調）
+        if nut is not None:
+            total += nut.power_mod
         return total
 
     @property
@@ -91,7 +97,9 @@ class Fighter:
     def drain_satiety(self) -> None:
         """1ターン分、満腹度を減らす。"""
         if self.max_satiety > 0:
-            self.satiety = max(0, self.satiety - SATIETY_DRAIN)
+            nut = getattr(self.entity, "nutrition", None)   # 炭水化物欠乏で減りが速い
+            extra = nut.satiety_drain_add if nut is not None else 0
+            self.satiety = max(0, self.satiety - SATIETY_DRAIN - extra)
 
     def restore_satiety(self, amount: int) -> int:
         """満腹度を回復し、実際に回復した量を返す。"""
@@ -140,4 +148,8 @@ class Fighter:
     def regenerate_stamina(self) -> None:
         """攻撃以外のターンにスタミナを少し回復する。"""
         if self.uses_stamina:
-            self.stamina = min(self.max_stamina, self.stamina + STAMINA_REGEN)
+            nut = getattr(self.entity, "nutrition", None)   # 脚気/貧血/燃料不足で回復↓、好調で↑
+            mult = nut.stamina_regen_mult if nut is not None else 1.0
+            self.stamina = min(
+                self.max_stamina, self.stamina + int(round(STAMINA_REGEN * mult))
+            )
