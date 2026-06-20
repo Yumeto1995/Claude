@@ -43,7 +43,7 @@ class Engine:
         self.cook_pot = []           # 料理の鍋に入れた食材名のリスト
         self.camp_objects = {}       # 自由配置の農場設備 (x,y)->{"kind","content"}
         self.camp_active_pos = None  # メニューで操作中の設備の位置
-        self.camp_build_kind = None  # ビルドモードで建設中の種類（None=非ビルド）
+        self.camp_tool = None        # 建設モードの選択中の道具インデックス（None=非建設）
         self.discovered_dishes = set()  # 作ったことのある料理名
         self.storage = []            # 拠点の倉庫（持ち越し収納）
         self.unlocked_zones = set()  # 開放済み区画（"ranch"/"fishery"）
@@ -359,7 +359,7 @@ class Engine:
         self.in_camp = True
         self.camp_menu = None
         self.camp_cursor = 0
-        self.camp_build_kind = None
+        self.camp_tool = None
         self.cook_pot = []
 
     def leave_camp(self) -> None:
@@ -421,35 +421,75 @@ class Engine:
                 self.message_log.add_message(fishery.label(obj), colors.NO_EFFECT)
 
     def _grow_camp(self) -> None:
-        """1歩あるくごとに、配置した農場設備の中身を育てる。"""
+        """1歩あるくごとに農場設備を育てる（水やり/餌やりのクールダウンも減る）。"""
         for obj in self.camp_objects.values():
             c = obj.get("content")
-            if c is not None and c["steps_left"] > 0:
+            if c is None:
+                continue
+            if c["steps_left"] > 0:
                 c["steps_left"] -= 1
+            if c.get("boost_cd", 0) > 0:
+                c["boost_cd"] -= 1
 
-    def camp_build_op(self, op: str) -> None:
-        """建設モードの操作。cycle=種類切替 / place=設置 / remove=撤去 / exit=終了。"""
-        kinds = ["farm", "pen", "tank"]
+    def camp_tool_op(self, op: str, index: int = None) -> None:
+        """建設モードの操作。cycle=道具切替 / select=直接選択 / use=使用 / exit=終了。"""
+        tools = camp_map.TOOLS
         if op == "cycle":
-            if self.camp_build_kind is None:
-                self.camp_build_kind = kinds[0]
+            if self.camp_tool is None:
+                self.camp_tool = 0
+            elif self.camp_tool + 1 < len(tools):
+                self.camp_tool += 1
             else:
-                i = kinds.index(self.camp_build_kind) + 1
-                self.camp_build_kind = kinds[i] if i < len(kinds) else None
-            if self.camp_build_kind is not None:
-                label, cost = camp_map.BUILDABLE[self.camp_build_kind][:2]
-                self.message_log.add_message(
-                    f"建設：{label}（{cost}）。Enter=設置 / b=切替 / x=撤去 / ESC=終了",
-                    colors.WELCOME,
-                )
-            else:
-                self.message_log.add_message("建設モードを終了した。", colors.NO_EFFECT)
+                self.camp_tool = None
+            self._announce_tool()
+        elif op == "select" and index is not None and 0 <= index < len(tools):
+            self.camp_tool = index
+            self._announce_tool()
         elif op == "exit":
-            self.camp_build_kind = None
-        elif op == "place" and self.camp_build_kind is not None:
-            self.camp_build(self.camp_build_kind)
-        elif op == "remove":
+            self.camp_tool = None
+        elif op == "use" and self.camp_tool is not None:
+            self._use_tool(tools[self.camp_tool])
+
+    def _announce_tool(self) -> None:
+        if self.camp_tool is None:
+            self.message_log.add_message("建設モードを終了した。", colors.NO_EFFECT)
+            return
+        tool = camp_map.TOOLS[self.camp_tool]
+        hint = f"（{camp_map.BUILDABLE[tool['kind']][1]}）" if tool["act"] == "build" else ""
+        self.message_log.add_message(
+            f"道具：{tool['name']}{hint}  Enter=使用 / b・1-6=切替 / ESC=終了",
+            colors.WELCOME,
+        )
+
+    def _use_tool(self, tool) -> None:
+        act = tool["act"]
+        if act == "build":
+            self.camp_build(tool["kind"])
+        elif act == "remove":
             self.camp_remove()
+        elif act == "water":
+            self._tend(("farm",), "水やり", "湿っている", "成長")
+        elif act == "feed":
+            self._tend(("pen", "tank"), "餌やり", "足りている", "産出")
+
+    def _tend(self, kinds, verb, full_word, what) -> None:
+        """育成中の対象を一定歩数進める（同歩数のクールダウンを付け、連打を防ぐ）。"""
+        pos = (self.player.x, self.player.y)
+        obj = self.camp_objects.get(pos)
+        if obj is None or obj["kind"] not in kinds:
+            self.message_log.add_message(f"ここに{verb}できる設備はない。", colors.NO_EFFECT)
+            return
+        c = obj["content"]
+        if c is None or c["steps_left"] <= 0:
+            self.message_log.add_message(f"今は{verb}の必要がない。", colors.NO_EFFECT)
+            return
+        if c.get("boost_cd", 0) > 0:
+            self.message_log.add_message(f"まだ{full_word}。", colors.NO_EFFECT)
+            return
+        boost = camp_map.TEND_BOOST
+        c["steps_left"] = max(0, c["steps_left"] - boost)
+        c["boost_cd"] = boost
+        self.message_log.add_message(f"{verb}した。{what}が進んだ。", colors.ITEM)
 
     def camp_build(self, kind: str) -> None:
         """足元の空きマスに農場設備を建てる（経験値を支払う）。"""

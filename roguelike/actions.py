@@ -197,15 +197,16 @@ class CampInteractAction(Action):
 
 
 class CampBuildAction(Action):
-    """建設モードの操作（cycle=種類切替 / place=設置 / remove=撤去 / exit=終了）。"""
+    """建設モードの道具操作（cycle=切替 / select=直接選択 / use=使用 / exit=終了）。"""
 
     consumes_turn = False
 
-    def __init__(self, op: str):
+    def __init__(self, op: str, index: int = None):
         self.op = op
+        self.index = index
 
     def perform(self, engine: Engine, entity: Entity) -> None:
-        engine.camp_build_op(self.op)
+        engine.camp_tool_op(self.op, self.index)
 
 
 class CampLeaveAction(Action):

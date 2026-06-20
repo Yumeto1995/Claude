@@ -26,7 +26,7 @@ def load_game(path: str = SAVE_PATH):
     # 後方互換：新しい属性が無い古いセーブを補完する
     defaults = {
         "in_village": False, "dialogue": None,
-        "camp_objects": {}, "camp_active_pos": None, "camp_build_kind": None,
+        "camp_objects": {}, "camp_active_pos": None, "camp_tool": None,
         "unlocked_zones": set(), "storage": [],
         "camp_menu": None, "cook_pot": [], "pending_moves": [],
         "inventory_cursor": 0, "pending_fx": [],

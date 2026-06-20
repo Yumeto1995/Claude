@@ -43,6 +43,18 @@ BUILDABLE = {
     "tank": ("いけす", 40, "st_fishery", "fishery"),
 }
 
+# 建設モードの道具（b で切替 / 1-6 で直接選択 / Enter で使用）。
+# act=build(kind を建設) / remove(撤去) / water(畑に水やり) / feed(牧柵・いけすに餌やり)
+TOOLS = [
+    {"name": "クワ（畑を作る）", "act": "build", "kind": "farm"},
+    {"name": "トンカチ（牧柵）", "act": "build", "kind": "pen"},
+    {"name": "トンカチ（いけす）", "act": "build", "kind": "tank"},
+    {"name": "ジョウロ（水やり）", "act": "water"},
+    {"name": "畜産フォーク（餌やり）", "act": "feed"},
+    {"name": "スコップ（撤去）", "act": "remove"},
+]
+TEND_BOOST = 15   # 水やり/餌やり1回で進む歩数（同歩数のクールダウンも付く）
+
 
 def build_camp_map() -> GameMap:
     gm = GameMap(CAMP_W, CAMP_H)

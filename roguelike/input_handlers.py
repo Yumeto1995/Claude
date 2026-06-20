@@ -55,6 +55,12 @@ _DIRECTIONS = {
     pygame.K_KP7: (-1, -1), pygame.K_KP9: (1, -1), pygame.K_KP1: (-1, 1), pygame.K_KP3: (1, 1),
 }
 
+# 数字キー 1-6 → 道具インデックス（建設モードの道具を直接選択）
+_NUM_KEYS = {
+    pygame.K_1: 0, pygame.K_2: 1, pygame.K_3: 2,
+    pygame.K_4: 3, pygame.K_5: 4, pygame.K_6: 5,
+}
+
 
 def dispatch_event(event: pygame.event.Event, engine: "Engine") -> Optional[Action]:
     """単発キー（押すたび1回）のイベントを Action に変換する。
@@ -103,16 +109,16 @@ def dispatch_event(event: pygame.event.Event, engine: "Engine") -> Optional[Acti
         if engine.in_camp:
             if engine.camp_menu is not None:
                 return _camp_menu_keys(key, engine)   # 設備メニュー中
-            # 建設モード中：Enter=設置 / b=種類切替 / x=撤去 / ESC=終了
-            if getattr(engine, "camp_build_kind", None) is not None:
+            # 建設モード中：Enter=道具を使う / b=切替 / 1-6=道具選択 / ESC=終了
+            if getattr(engine, "camp_tool", None) is not None:
                 if key in (pygame.K_RETURN, pygame.K_KP_ENTER):
-                    return CampBuildAction("place")
+                    return CampBuildAction("use")
                 if key == pygame.K_b:
                     return CampBuildAction("cycle")
-                if key in (pygame.K_x, pygame.K_DELETE, pygame.K_BACKSPACE):
-                    return CampBuildAction("remove")
                 if key == pygame.K_ESCAPE:
                     return CampBuildAction("exit")
+                if key in _NUM_KEYS:
+                    return CampBuildAction("select", _NUM_KEYS[key])
                 return None  # 方向キーはポーリングで移動
             # テント内を歩いている：b=建設モード / Enter=設備 / ESC=ダンジョンへ
             if key == pygame.K_b:

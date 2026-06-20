@@ -1022,15 +1022,16 @@ class Renderer:
 
         # 足元の案内（建設モード / 住居設備 / 配置物）。設備メニュー中は出さない。
         pos = (engine.player.x, engine.player.y)
-        bk = getattr(engine, "camp_build_kind", None)
-        if bk is not None:
-            label, cost = camp_map.BUILDABLE[bk][:2]
+        ti = getattr(engine, "camp_tool", None)
+        if ti is not None:
+            tool = camp_map.TOOLS[ti]
             px = engine.player.x * TILE_SIZE - cam_x
             py = engine.player.y * TILE_SIZE - cam_y
-            free = pos not in camp_map.STATIONS and pos not in engine.camp_objects
-            pygame.draw.rect(screen, (120, 230, 140) if free else (230, 120, 110),
+            ok = self._tool_target_ok(engine, pos, tool)
+            pygame.draw.rect(screen, (120, 230, 140) if ok else (230, 120, 110),
                              (px, py, TILE_SIZE, TILE_SIZE), 2)
-            self._draw_chip(f"建設:{label}({cost})  Enter設置 b切替 x撤去 ESC終了",
+            cost = f"({camp_map.BUILDABLE[tool['kind']][1]})" if tool["act"] == "build" else ""
+            self._draw_chip(f"{tool['name']}{cost}  Enter使用 / b・1-6切替 / ESC終了",
                             8, self.play_h - 36, (255, 205, 90))
         elif engine.camp_menu is None:
             here = camp_map.STATIONS.get(pos)
@@ -1052,6 +1053,23 @@ class Renderer:
                 return "farm_empty"
             return "farm_ready" if c["steps_left"] <= 0 else "farm_grow"
         return "st_ranch" if kind == "pen" else "st_fishery"
+
+    @staticmethod
+    def _tool_target_ok(engine, pos, tool) -> bool:
+        """道具が足元タイルで使えるか（建設モードの緑/赤ハイライト用）。"""
+        import camp_map
+        act = tool["act"]
+        obj = engine.camp_objects.get(pos)
+        if act == "build":
+            return pos not in camp_map.STATIONS and obj is None
+        if act == "remove":
+            return obj is not None
+        if act in ("water", "feed"):
+            want = ("farm",) if act == "water" else ("pen", "tank")
+            c = obj["content"] if obj is not None else None
+            return (obj is not None and obj["kind"] in want
+                    and c is not None and c["steps_left"] > 0 and c.get("boost_cd", 0) <= 0)
+        return False
 
     def _render_camp_menu(self, engine: "Engine") -> None:
         """設備メニュー：全画面を暗くして大きな装飾ウィンドウに表示する。"""
