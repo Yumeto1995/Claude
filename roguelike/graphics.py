@@ -145,6 +145,19 @@ PLACEHOLDER_COLORS: Dict[str, tuple] = {
     "stairs_up": (240, 210, 120),
     "tent": (90, 170, 90),
     "food": (220, 180, 120),
+    # 食材の個別アイコン（実画像が来るまでの仮色）
+    "food_nuts": (170, 90, 50), "food_herb": (90, 180, 90),
+    "food_mushroom": (180, 130, 90), "food_meat": (200, 90, 80),
+    "food_egg": (245, 235, 200), "food_milk": (236, 240, 245),
+    "food_fish": (130, 170, 200), "food_bigfish": (90, 140, 190),
+    "food_ration": (180, 160, 120), "food_potato": (182, 140, 90),
+    "food_fruit": (220, 80, 90), "food_shellfish": (210, 190, 160),
+    "food_cheese": (240, 200, 90), "food_honey": (230, 170, 60),
+    # 農具アイコン（建設モードのチップ用）
+    "tool_hoe": (150, 120, 80), "tool_hammer": (140, 110, 90),
+    "tool_wateringcan": (110, 170, 200), "tool_pitchfork": (160, 140, 100),
+    "tool_shovel": (150, 150, 160),
+    "feed": (200, 180, 90), "sprinkler": (120, 180, 210),
     "seed": (170, 140, 80),
     "dish": (255, 170, 90),
     # 拠点の設備
@@ -1030,9 +1043,15 @@ class Renderer:
             ok = self._tool_target_ok(engine, pos, tool)
             pygame.draw.rect(screen, (120, 230, 140) if ok else (230, 120, 110),
                              (px, py, TILE_SIZE, TILE_SIZE), 2)
+            cx = 8
+            icon = self.sprites.get(tool.get("sprite"))
+            if icon is not None:                      # 道具アイコンをチップ左に
+                screen.blit(pygame.transform.smoothscale(icon, (28, 28)),
+                            (10, self.play_h - 40))
+                cx = 44
             cost = f"({camp_map.BUILDABLE[tool['kind']][1]})" if tool["act"] == "build" else ""
-            self._draw_chip(f"{tool['name']}{cost}  Enter使用 / b・1-6切替 / ESC終了",
-                            8, self.play_h - 36, (255, 205, 90))
+            self._draw_chip(f"{tool['name']}{cost}  Enter使用 / b・1-7切替 / ESC終了",
+                            cx, self.play_h - 36, (255, 205, 90))
         elif engine.camp_menu is None:
             here = camp_map.STATIONS.get(pos)
             if here is not None:
@@ -1052,7 +1071,11 @@ class Renderer:
             if c is None:
                 return "farm_empty"
             return "farm_ready" if c["steps_left"] <= 0 else "farm_grow"
-        return "st_ranch" if kind == "pen" else "st_fishery"
+        if kind == "pen":
+            return "st_ranch"
+        if kind == "tank":
+            return "st_fishery"
+        return "sprinkler"
 
     @staticmethod
     def _tool_target_ok(engine, pos, tool) -> bool:

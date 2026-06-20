@@ -41,17 +41,19 @@ BUILDABLE = {
     "farm": ("畑", 20, "farm_empty", None),
     "pen":  ("牧柵", 40, "st_ranch", "ranch"),
     "tank": ("いけす", 40, "st_fishery", "fishery"),
+    "sprinkler": ("スプリンクラー", 60, "sprinkler", None),  # 隣接する畑を自動で水やり
 }
 
 # 建設モードの道具（b で切替 / 1-6 で直接選択 / Enter で使用）。
 # act=build(kind を建設) / remove(撤去) / water(畑に水やり) / feed(牧柵・いけすに餌やり)
 TOOLS = [
-    {"name": "クワ（畑を作る）", "act": "build", "kind": "farm"},
-    {"name": "トンカチ（牧柵）", "act": "build", "kind": "pen"},
-    {"name": "トンカチ（いけす）", "act": "build", "kind": "tank"},
-    {"name": "ジョウロ（水やり）", "act": "water"},
-    {"name": "畜産フォーク（餌やり）", "act": "feed"},
-    {"name": "スコップ（撤去）", "act": "remove"},
+    {"name": "クワ（畑を作る）", "act": "build", "kind": "farm", "sprite": "tool_hoe"},
+    {"name": "トンカチ（牧柵）", "act": "build", "kind": "pen", "sprite": "tool_hammer"},
+    {"name": "トンカチ（いけす）", "act": "build", "kind": "tank", "sprite": "tool_hammer"},
+    {"name": "トンカチ（スプリンクラー）", "act": "build", "kind": "sprinkler", "sprite": "tool_hammer"},
+    {"name": "ジョウロ（水やり）", "act": "water", "sprite": "tool_wateringcan"},
+    {"name": "畜産フォーク（餌やり）", "act": "feed", "sprite": "tool_pitchfork"},
+    {"name": "スコップ（撤去）", "act": "remove", "sprite": "tool_shovel"},
 ]
 TEND_BOOST = 15   # 水やり/餌やり1回で進む歩数（同歩数のクールダウンも付く）
 

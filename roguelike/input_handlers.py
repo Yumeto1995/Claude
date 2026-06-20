@@ -55,10 +55,10 @@ _DIRECTIONS = {
     pygame.K_KP7: (-1, -1), pygame.K_KP9: (1, -1), pygame.K_KP1: (-1, 1), pygame.K_KP3: (1, 1),
 }
 
-# 数字キー 1-6 → 道具インデックス（建設モードの道具を直接選択）
+# 数字キー 1-7 → 道具インデックス（建設モードの道具を直接選択）
 _NUM_KEYS = {
-    pygame.K_1: 0, pygame.K_2: 1, pygame.K_3: 2,
-    pygame.K_4: 3, pygame.K_5: 4, pygame.K_6: 5,
+    pygame.K_1: 0, pygame.K_2: 1, pygame.K_3: 2, pygame.K_4: 3,
+    pygame.K_5: 4, pygame.K_6: 5, pygame.K_7: 6,
 }
 
 

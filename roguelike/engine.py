@@ -419,15 +419,27 @@ class Engine:
                 fishery.collect(self, obj)
             else:
                 self.message_log.add_message(fishery.label(obj), colors.NO_EFFECT)
+        elif kind == "sprinkler":
+            self.message_log.add_message(
+                "スプリンクラーが周囲の畑を自動で潤している。", colors.NO_EFFECT
+            )
 
     def _grow_camp(self) -> None:
-        """1歩あるくごとに農場設備を育てる（水やり/餌やりのクールダウンも減る）。"""
-        for obj in self.camp_objects.values():
+        """1歩あるくごとに農場設備を育てる。スプリンクラー隣接の畑は自動水やりで倍速。"""
+        sprinkled = set()
+        for (x, y), o in self.camp_objects.items():
+            if o["kind"] == "sprinkler":
+                for dx in (-1, 0, 1):
+                    for dy in (-1, 0, 1):
+                        sprinkled.add((x + dx, y + dy))
+        for pos, obj in self.camp_objects.items():
             c = obj.get("content")
             if c is None:
                 continue
             if c["steps_left"] > 0:
                 c["steps_left"] -= 1
+                if obj["kind"] == "farm" and pos in sprinkled and c["steps_left"] > 0:
+                    c["steps_left"] -= 1   # スプリンクラーで自動水やり（成長倍速）
             if c.get("boost_cd", 0) > 0:
                 c["boost_cd"] -= 1
 
@@ -457,7 +469,7 @@ class Engine:
         tool = camp_map.TOOLS[self.camp_tool]
         hint = f"（{camp_map.BUILDABLE[tool['kind']][1]}）" if tool["act"] == "build" else ""
         self.message_log.add_message(
-            f"道具：{tool['name']}{hint}  Enter=使用 / b・1-6=切替 / ESC=終了",
+            f"道具：{tool['name']}{hint}  Enter=使用 / b・1-7=切替 / ESC=終了",
             colors.WELCOME,
         )
 
@@ -470,10 +482,11 @@ class Engine:
         elif act == "water":
             self._tend(("farm",), "水やり", "湿っている", "成長")
         elif act == "feed":
-            self._tend(("pen", "tank"), "餌やり", "足りている", "産出")
+            self._tend(("pen", "tank"), "餌やり", "足りている", "産出", consume="飼料")
 
-    def _tend(self, kinds, verb, full_word, what) -> None:
-        """育成中の対象を一定歩数進める（同歩数のクールダウンを付け、連打を防ぐ）。"""
+    def _tend(self, kinds, verb, full_word, what, consume=None) -> None:
+        """育成中の対象を一定歩数進める（同歩数のクールダウン付き）。
+        consume を指定すると、その素材を持ち物から1つ消費する（餌やり＝飼料）。"""
         pos = (self.player.x, self.player.y)
         obj = self.camp_objects.get(pos)
         if obj is None or obj["kind"] not in kinds:
@@ -486,10 +499,20 @@ class Engine:
         if c.get("boost_cd", 0) > 0:
             self.message_log.add_message(f"まだ{full_word}。", colors.NO_EFFECT)
             return
+        if consume is not None:
+            inv = self.player.inventory.items
+            item = next((it for it in inv if it.name == consume), None)
+            if item is None:
+                self.message_log.add_message(
+                    f"{consume}がない（木の実から錬金で作れる）。", colors.NO_EFFECT
+                )
+                return
+            inv.remove(item)
         boost = camp_map.TEND_BOOST
         c["steps_left"] = max(0, c["steps_left"] - boost)
         c["boost_cd"] = boost
-        self.message_log.add_message(f"{verb}した。{what}が進んだ。", colors.ITEM)
+        suffix = f"（{consume}を1消費）" if consume is not None else ""
+        self.message_log.add_message(f"{verb}した。{what}が進んだ{suffix}。", colors.ITEM)
 
     def camp_build(self, kind: str) -> None:
         """足元の空きマスに農場設備を建てる（経験値を支払う）。"""

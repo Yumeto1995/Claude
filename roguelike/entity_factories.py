@@ -138,45 +138,45 @@ slime_shard = Entity(
 
 # --- 食料・食材（消費アイテム。満腹度を回復し、料理の材料にもなる）---
 nuts = Entity(
-    sprite="food", name="木の実", blocks_movement=False,
+    sprite="food_nuts", name="木の実", blocks_movement=False,
     consumable=FoodConsumable(amount=25), shelf_life=400,  # 乾物で日持ち
 )
 preserved_food = Entity(
-    sprite="food", name="携帯食料", blocks_movement=False,
+    sprite="food_ration", name="携帯食料", blocks_movement=False,
     consumable=FoodConsumable(amount=50), shelf_life=600,  # 保存食。最長だが不滅ではない
 )
 herb = Entity(
-    sprite="food", name="薬草", blocks_movement=False,
+    sprite="food_herb", name="薬草", blocks_movement=False,
     consumable=FoodConsumable(amount=15), shelf_life=200,
 )
 mushroom = Entity(
-    sprite="food", name="キノコ", blocks_movement=False,
+    sprite="food_mushroom", name="キノコ", blocks_movement=False,
     consumable=FoodConsumable(amount=15), shelf_life=180,
 )
 meat = Entity(
-    sprite="food", name="肉", blocks_movement=False,
+    sprite="food_meat", name="肉", blocks_movement=False,
     consumable=FoodConsumable(amount=20), shelf_life=120,  # 生肉。傷みやすい
 )
 
 # 追加食材（栄養ニッチを埋める。日持ちは食材ごとに差をつける）
 potato = Entity(
-    sprite="food", name="イモ", blocks_movement=False,
+    sprite="food_potato", name="イモ", blocks_movement=False,
     consumable=FoodConsumable(amount=30), shelf_life=350,  # 炭水化物源・日持ち長め
 )
 fruit = Entity(
-    sprite="food", name="果実", blocks_movement=False,
+    sprite="food_fruit", name="果実", blocks_movement=False,
     consumable=FoodConsumable(amount=18), shelf_life=90,   # ビタミンC源・傷みやすい
 )
 shellfish = Entity(
-    sprite="food", name="貝", blocks_movement=False,
+    sprite="food_shellfish", name="貝", blocks_movement=False,
     consumable=FoodConsumable(amount=16), shelf_life=100,  # カルシウム＋鉄
 )
 cheese = Entity(
-    sprite="food", name="チーズ", blocks_movement=False,
+    sprite="food_cheese", name="チーズ", blocks_movement=False,
     consumable=FoodConsumable(amount=24), shelf_life=300,  # 日持ちするカルシウム源
 )
 honey = Entity(
-    sprite="food", name="蜂蜜", blocks_movement=False,
+    sprite="food_honey", name="蜂蜜", blocks_movement=False,
     consumable=FoodConsumable(amount=22), shelf_life=800,  # 超日持ちの炭水化物
 )
 # 毒キノコ：生食はできない素材。料理して毒を抜けば食材になる（生焼けだと食中毒）
@@ -200,13 +200,13 @@ mushroom_seed = Entity(
 )
 
 # --- 畜産・漁業の産物（食材。満腹度回復＋料理素材）---
-egg = Entity(sprite="food", name="卵", blocks_movement=False,
+egg = Entity(sprite="food_egg", name="卵", blocks_movement=False,
              consumable=FoodConsumable(amount=15), shelf_life=140)
-milk = Entity(sprite="food", name="ミルク", blocks_movement=False,
+milk = Entity(sprite="food_milk", name="ミルク", blocks_movement=False,
               consumable=FoodConsumable(amount=20), shelf_life=120)
-fish = Entity(sprite="food", name="魚", blocks_movement=False,
+fish = Entity(sprite="food_fish", name="魚", blocks_movement=False,
               consumable=FoodConsumable(amount=20), shelf_life=110)
-big_fish = Entity(sprite="food", name="大魚", blocks_movement=False,
+big_fish = Entity(sprite="food_bigfish", name="大魚", blocks_movement=False,
                   consumable=FoodConsumable(amount=35), shelf_life=110)
 # フグ：生食危険な素材（料理して毒を抜く前提）
 puffer = Entity(sprite="material", name="フグ", blocks_movement=False,
@@ -218,6 +218,9 @@ chicken = Entity(sprite="material", name="ニワトリ", blocks_movement=False,
 cow = Entity(sprite="material", name="ウシ", blocks_movement=False,
              item_category=ItemCategory.MATERIAL)
 bait = Entity(sprite="material", name="エサ", blocks_movement=False,
+              item_category=ItemCategory.MATERIAL)
+# 飼料：畜産フォークでの餌やりに消費する（木の実から錬金で作る）
+feed = Entity(sprite="feed", name="飼料", blocks_movement=False,
               item_category=ItemCategory.MATERIAL)
 
 # 料理は固定テンプレートではなく cooking.cook() が動的に生成する。
