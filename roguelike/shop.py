@@ -27,9 +27,13 @@ WARES = {
         (ef.chain_mail, 180),
     ],
     "food": [
-        (ef.nuts, 12),
-        (ef.preserved_food, 35),
-        (ef.herb, 10),
+        # 全栄養素を補給できる品揃え（栄養は非表示＝食べて覚える）
+        (ef.nuts, 12),          # 炭水化物・脂質
+        (ef.preserved_food, 35),  # 炭水化物・たんぱく質（日持ち）
+        (ef.herb, 10),          # ビタミンC・A
+        (ef.meat, 22),          # たんぱく質・鉄分
+        (ef.milk, 16),          # カルシウム・ビタミンA
+        (ef.egg, 14),           # バランス（カルシウム等）
     ],
 }
 
