@@ -37,6 +37,7 @@ class Entity:
         equipment: Optional["Equipment"] = None,
         item_category: Optional["ItemCategory"] = None,
         count: int = 1,
+        shelf_life=None,
         skills=None,
         nutrition=None,
         dialogue=None,
@@ -85,6 +86,9 @@ class Entity:
         self.item_category = item_category
         # スタック数（矢などの弾用。通常アイテムは 1）。
         self.count = count
+        # 腐敗：shelf_life=腐るまでのターン数（None=腐らない）、freshness=残り鮮度。
+        self.shelf_life = shelf_life
+        self.freshness = shelf_life
         # 一時的な状態効果（料理バフなど）。主にプレイヤーが使う。
         self.status_effects = []
         # 村のNPC用のセリフ（リスト）。NPC以外は None。

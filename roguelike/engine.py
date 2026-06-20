@@ -11,6 +11,7 @@ import fishery
 import item_category
 import ranch
 import shop
+import spoilage
 import village_map
 from actions import EscapeAction
 from fov import DEFAULT_RADIUS, compute_fov
@@ -160,6 +161,7 @@ class Engine:
                 )
             self._tick_status_effects()
             self._tick_nutrition()     # 隠し栄養の減衰＋欠乏症状
+            spoilage.tick(self.player)  # 持ち物の食料が古くなる（倉庫は除く）
             self.update_fov()          # プレイヤーが動いたので視界更新
             self.handle_enemy_turns()  # 敵は視界内のものだけ動く
 

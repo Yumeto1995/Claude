@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING, Optional
 import colors
 import combat
 import nutrition
+import spoilage
 
 if TYPE_CHECKING:
     from engine import Engine
@@ -73,13 +74,22 @@ class FoodConsumable(Consumable):
         if f.satiety >= f.max_satiety:
             engine.message_log.add_message("満腹で食べられない。", colors.NO_EFFECT)
             return False
-        restored = f.restore_satiety(self.amount)
+        factor = spoilage.freshness_factor(self.entity)   # 傷み/腐敗で回復減
+        restored = f.restore_satiety(int(self.amount * factor))
         nut = getattr(consumer, "nutrition", None)
-        if nut is not None:                      # 隠し栄養：この食材の栄養を蓄積
-            nut.eat(nutrition.profile_for(self.entity.name))
+        if nut is not None:                      # 隠し栄養：鮮度に応じて蓄積
+            nut.eat(nutrition.profile_for(self.entity.name),
+                    scale=nutrition.EAT_SCALE * factor)
+        adj = {"傷み": "傷んだ", "腐敗": "腐った"}.get(spoilage.stage(self.entity)[0], "")
         engine.message_log.add_message(
-            f"{self.entity.name} を食べた。満腹度が {restored} 回復した。", colors.HEAL
+            f"{adj}{self.entity.name} を食べた。満腹度が {restored} 回復した。", colors.HEAL
         )
+        poison = spoilage.poison_on_eat(self.entity)   # 腐敗ほど食中毒の危険
+        if poison is not None:
+            consumer.status_effects.append(poison)
+            engine.message_log.add_message(
+                f"うっ…お腹を壊した！（{poison.name}）", colors.PLAYER_DIE
+            )
         return True
 
 
@@ -98,21 +108,29 @@ class FoodDishConsumable(Consumable):
         f = consumer.fighter
         if f is None:
             return False
+        factor = spoilage.freshness_factor(self.entity)   # 傷み/腐敗で効果減
         if f.max_satiety > 0 and self.satiety:
-            f.satiety = max(0, min(f.max_satiety, f.satiety + self.satiety))
+            f.satiety = max(0, min(f.max_satiety, f.satiety + int(self.satiety * factor)))
         if self.heal:
-            f.hp += self.heal
+            f.hp += int(self.heal * factor)
         for eff in self.effects:
             consumer.status_effects.append(copy.deepcopy(eff))
         nut = getattr(consumer, "nutrition", None)
-        if nut is not None and self.nutrients:   # 隠し栄養：料理の栄養を蓄積
-            nut.eat(self.nutrients)
+        if nut is not None and self.nutrients:   # 隠し栄養：鮮度に応じて蓄積
+            nut.eat(self.nutrients, scale=nutrition.EAT_SCALE * factor)
 
         names = "・".join(e.name for e in self.effects)
-        msg = f"{self.entity.name} を食べた。"
+        adj = {"傷み": "傷んだ", "腐敗": "腐った"}.get(spoilage.stage(self.entity)[0], "")
+        msg = f"{adj}{self.entity.name} を食べた。"
         if names:
             msg += f" {names}！"
         engine.message_log.add_message(msg, colors.HEAL)
+        poison = spoilage.poison_on_eat(self.entity)   # 腐敗ほど食中毒の危険
+        if poison is not None:
+            consumer.status_effects.append(poison)
+            engine.message_log.add_message(
+                f"うっ…お腹を壊した！（{poison.name}）", colors.PLAYER_DIE
+            )
         return True
 
 

@@ -139,23 +139,23 @@ slime_shard = Entity(
 # --- 食料・食材（消費アイテム。満腹度を回復し、料理の材料にもなる）---
 nuts = Entity(
     sprite="food", name="木の実", blocks_movement=False,
-    consumable=FoodConsumable(amount=25),
+    consumable=FoodConsumable(amount=25), shelf_life=400,  # 乾物で日持ち
 )
 preserved_food = Entity(
     sprite="food", name="携帯食料", blocks_movement=False,
-    consumable=FoodConsumable(amount=50),
+    consumable=FoodConsumable(amount=50), shelf_life=600,  # 保存食。最長だが不滅ではない
 )
 herb = Entity(
     sprite="food", name="薬草", blocks_movement=False,
-    consumable=FoodConsumable(amount=15),
+    consumable=FoodConsumable(amount=15), shelf_life=200,
 )
 mushroom = Entity(
     sprite="food", name="キノコ", blocks_movement=False,
-    consumable=FoodConsumable(amount=15),
+    consumable=FoodConsumable(amount=15), shelf_life=180,
 )
 meat = Entity(
     sprite="food", name="肉", blocks_movement=False,
-    consumable=FoodConsumable(amount=20),
+    consumable=FoodConsumable(amount=20), shelf_life=120,  # 生肉。傷みやすい
 )
 # 毒キノコ：生食はできない素材。料理して毒を抜けば食材になる（生焼けだと食中毒）
 poison_mushroom = Entity(
@@ -179,13 +179,13 @@ mushroom_seed = Entity(
 
 # --- 畜産・漁業の産物（食材。満腹度回復＋料理素材）---
 egg = Entity(sprite="food", name="卵", blocks_movement=False,
-             consumable=FoodConsumable(amount=15))
+             consumable=FoodConsumable(amount=15), shelf_life=140)
 milk = Entity(sprite="food", name="ミルク", blocks_movement=False,
-              consumable=FoodConsumable(amount=20))
+              consumable=FoodConsumable(amount=20), shelf_life=120)
 fish = Entity(sprite="food", name="魚", blocks_movement=False,
-              consumable=FoodConsumable(amount=20))
+              consumable=FoodConsumable(amount=20), shelf_life=110)
 big_fish = Entity(sprite="food", name="大魚", blocks_movement=False,
-                  consumable=FoodConsumable(amount=35))
+                  consumable=FoodConsumable(amount=35), shelf_life=110)
 # フグ：生食危険な素材（料理して毒を抜く前提）
 puffer = Entity(sprite="material", name="フグ", blocks_movement=False,
                 item_category=ItemCategory.MATERIAL)

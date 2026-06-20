@@ -1083,6 +1083,7 @@ class Renderer:
 
     def _render_inventory(self, engine: "Engine") -> None:
         """持ち物メニュー：装飾枠＋分類タブ＋アイコン付き一覧。"""
+        import spoilage
         screen = self.screen
         all_items = engine.player.inventory.items
         current = item_category.ORDER[engine.inventory_category]
@@ -1138,6 +1139,10 @@ class Renderer:
                 name_color = self.TEXT_GOLD if i == cursor else self.TEXT_MAIN
                 disp_name = item.name if getattr(item, "count", 1) <= 1 else f"{item.name} ×{item.count}"
                 self._text(disp_name, x + 62, row_y + 7, color=name_color)
+                slabel, scolor = spoilage.stage(item)   # 鮮度タグ（新鮮/傷み/腐敗）
+                if slabel:
+                    nw = self.font.size(disp_name)[0]
+                    self._text(slabel, x + 62 + nw + 12, row_y + 7, color=scolor, shadow=False)
                 # 右端：装備中バッジ → 性能（控えめ色）の順に右詰め
                 right = x + width - 16
                 if equipment.item_is_equipped(item):

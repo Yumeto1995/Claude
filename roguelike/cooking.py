@@ -156,6 +156,7 @@ def cook(engine: "Engine", pot: List[str], method: str) -> None:
             satiety=res["satiety"], heal=res["heal"], effects=res["effects"],
             nutrients=res.get("nutrients"),
         ),
+        shelf_life=150,  # 料理も傷む（保存目的にはならない）
     )
     inv.append(dish)
     engine.discovered_dishes.add(res["name"])
