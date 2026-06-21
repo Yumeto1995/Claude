@@ -792,6 +792,9 @@ class Renderer:
             self._draw_chip("セーフルーム", self.view_w * TILE_SIZE - 8, 8,
                             colors.HEAL, right_align=True)
 
+        # ボスフロアでは画面上部に主のHPバー
+        self._render_boss_hud(engine)
+
         self._render_panel(engine)
 
         if engine.inventory_open:
@@ -1500,6 +1503,49 @@ class Renderer:
         head = (sx + ux * half, sy + uy * half)
         pygame.draw.line(self.screen, (240, 228, 180), tail, head, 3)
         pygame.draw.circle(self.screen, (255, 250, 210), (int(head[0]), int(head[1])), 3)
+
+    @staticmethod
+    def _boss_entity(gm):
+        """ボスフロアの主（生存中の大型エンティティ）を返す。いなければ None。"""
+        if not getattr(gm, "boss_floor", False):
+            return None
+        for e in gm.entities:
+            if getattr(e, "size", 1) > 1:
+                f = getattr(e, "fighter", None)
+                if f is not None and f.hp > 0:
+                    return e
+        return None
+
+    def _render_boss_hud(self, engine: "Engine") -> None:
+        """ボスフロアで主を視認中、画面上部に名前＋HPバーを表示する。"""
+        gm = engine.game_map
+        boss = self._boss_entity(gm)
+        if boss is None:
+            return
+        # 一度視認したら、そのフロアにいる間は出し続ける（視界外でも消えない）
+        es = getattr(boss, "size", 1)
+        if not getattr(boss, "_hud_seen", False):
+            visible_now = any(gm.in_bounds(boss.x + ox, boss.y + oy)
+                              and gm.visible[boss.x + ox, boss.y + oy]
+                              for ox in range(es) for oy in range(es))
+            if not visible_now:
+                return
+            boss._hud_seen = True
+
+        f = boss.fighter
+        width = self.view_w * TILE_SIZE
+        ww = min(width - 80, 560)
+        x0 = (width - ww) // 2
+        y0, wh = 14, 56
+        self._draw_window(x0, y0, ww, wh, alpha=235)
+        # 名前（左・金色）／HP数値（右）
+        self._text(boss.name, x0 + 16, y0 + 8, color=(244, 208, 120), bold=True)
+        vt = f"{max(0, f.hp)}/{f.max_hp}"
+        vw = self.font.size(vt)[0]
+        self._text(vt, x0 + ww - 16 - vw, y0 + 8)
+        # HP ゲージ（幅広・残量で色変化）
+        ratio = f.hp / max(1, f.max_hp)
+        self._draw_gauge(x0 + 16, y0 + 32, ww - 32, 16, ratio, self._ratio_color(ratio))
 
     @staticmethod
     def _ratio_color(ratio: float) -> tuple:
