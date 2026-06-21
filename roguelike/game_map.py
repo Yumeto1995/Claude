@@ -23,6 +23,7 @@ class GameMap:
         self.rooms: List[tuple] = []  # 各部屋の (x1, y1, x2, y2)。FOV で使う。
         self.downstairs_location = (0, 0)  # 下り階段の座標
         self.upstairs_location = (0, 0)    # 上り階段の座標（前の階／村へ）
+        self.boss_floor = False            # ボスフロアか（上り階段無し＝戻れない）
 
         # 最初は全面を壁にしておき、生成側で部屋・通路を床に掘る
         self.tiles = np.full((width, height), fill_value=tile_types.wall, order="F")
@@ -37,8 +38,14 @@ class GameMap:
         return 0 <= x < self.width and 0 <= y < self.height
 
     def get_blocking_entity_at(self, x: int, y: int) -> Optional["Entity"]:
-        """(x, y) にいる『すり抜け不可』なエンティティを返す。なければ None。"""
+        """(x, y) を占有する『すり抜け不可』なエンティティを返す。なければ None。
+
+        大型エンティティ（size>1）は (x,y) を左上に size×size マスを占有する。
+        """
         for entity in self.entities:
-            if entity.blocks_movement and entity.x == x and entity.y == y:
+            if not entity.blocks_movement:
+                continue
+            s = getattr(entity, "size", 1)
+            if entity.x <= x < entity.x + s and entity.y <= y < entity.y + s:
                 return entity
         return None

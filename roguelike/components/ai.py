@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING, List, Optional, Tuple
 import numpy as np
 
 import colors
+import combat
 from actions import BumpAction, MeleeAction, MovementAction
 from pathfinding import find_path
 from rl import obs as rl_obs
@@ -199,3 +200,63 @@ class ConfusedEnemy(BaseAI):
         ])
         # ランダム方向（斜め含む）へ。誰かにぶつかれば攻撃になる。
         BumpAction(dx, dy).perform(engine, self.entity)
+
+
+class BossAI(BaseAI):
+    """3×3 の大型ボス。プレイヤーを追い、フットプリントに隣接したら大振りで攻撃。
+
+    1×1 用の Movement/Melee は使えないため、3×3 をまとめて動かす専用ロジック。
+    プレイヤーがボスの9マスのどれかに隣接（外周1マス）したら攻撃する。
+    """
+
+    def perform(self, engine: "Engine") -> None:
+        boss = self.entity
+        s = getattr(boss, "size", 3)
+        gm = engine.game_map
+        # 自分のどこかが見えていなければ動かない
+        if not any(
+            gm.in_bounds(boss.x + ox, boss.y + oy) and gm.visible[boss.x + ox, boss.y + oy]
+            for ox in range(s) for oy in range(s)
+        ):
+            return
+        player = engine.player
+        # プレイヤーが 3×3 の外周（8近傍）に接していれば攻撃
+        if (boss.x - 1 <= player.x <= boss.x + s
+                and boss.y - 1 <= player.y <= boss.y + s):
+            self._attack(engine, boss, player)
+            return
+        # 中心から見たプレイヤー方向へ 1 歩（3×3 が通れる方向を順に試す）
+        cx, cy = boss.x + s // 2, boss.y + s // 2
+        dx = (player.x > cx) - (player.x < cx)
+        dy = (player.y > cy) - (player.y < cy)
+        for mx, my in ((dx, dy), (dx, 0), (0, dy)):
+            if (mx or my) and self._can_move(engine, boss, s, mx, my):
+                boss.x += mx
+                boss.y += my
+                engine.pending_moves.append((boss, mx, my))
+                return
+
+    @staticmethod
+    def _can_move(engine: "Engine", boss, s: int, mx: int, my: int) -> bool:
+        gm = engine.game_map
+        for ox in range(s):
+            for oy in range(s):
+                nx, ny = boss.x + mx + ox, boss.y + my + oy
+                if not gm.in_bounds(nx, ny) or not gm.tiles["walkable"][nx, ny]:
+                    return False
+                other = gm.get_blocking_entity_at(nx, ny)
+                if other is not None and other is not boss:
+                    return False
+        return True
+
+    @staticmethod
+    def _attack(engine: "Engine", boss, player) -> None:
+        if player.fighter is None or boss.fighter is None:
+            return
+        damage = max(1, boss.fighter.power - player.fighter.defense)
+        engine.message_log.add_message(
+            f"{boss.name} の大振り！ {damage} ダメージ", colors.ENEMY_ATK
+        )
+        engine.pending_fx.append(("flash", player))
+        engine.pending_fx.append(("popup", player.x, player.y, f"-{damage}", (255, 90, 90)))
+        combat.inflict_damage(engine, player, damage, attacker=boss)

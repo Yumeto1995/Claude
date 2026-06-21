@@ -129,6 +129,7 @@ PLACEHOLDER_COLORS: Dict[str, tuple] = {
     "npc": (240, 220, 150),
     "goblin": (80, 200, 80),
     "slime": (80, 200, 200),
+    "boss": (170, 60, 70),
     "corpse": (191, 0, 0),
     "potion": (230, 90, 200),
     "scroll": (230, 220, 140),
@@ -758,14 +759,24 @@ class Renderer:
         # エンティティを描画（死体→生者の順）。見えているタイルのものだけ。
         vw, vh = self.view_w * TILE_SIZE, self.view_h * TILE_SIZE
         for entity in sorted(gm.entities, key=lambda e: e.blocks_movement):
-            if not gm.visible[entity.x, entity.y]:
+            es = getattr(entity, "size", 1)
+            # 可視判定：大型はフットプリントのどこかが見えていれば描く
+            if es > 1:
+                vis = any(gm.in_bounds(entity.x + ox, entity.y + oy)
+                          and gm.visible[entity.x + ox, entity.y + oy]
+                          for ox in range(es) for oy in range(es))
+            else:
+                vis = gm.visible[entity.x, entity.y]
+            if not vis:
                 continue
             sx, sy = self._entity_screen(entity, cam_x, cam_y)
-            if -TILE_SIZE < sx < vw and -TILE_SIZE < sy < vh:
+            if -TILE_SIZE * es < sx < vw and -TILE_SIZE * es < sy < vh:
                 # 攻撃ポーズ・歩行コマ・通常を状況で切り替える
                 sprite = self.sprites.get(
                     self._sprite_key_for(entity), self.sprites["player"]
                 )
+                if es > 1:                              # 大型ボスは size×size に拡大
+                    sprite = pygame.transform.scale(sprite, (TILE_SIZE * es, TILE_SIZE * es))
                 flash = self.flash.get(id(entity), 0.0)
                 if flash > 0.0:
                     sprite = self._whiten(sprite, flash)  # 被弾フラッシュ

@@ -4,7 +4,7 @@ sprite は assets/<sprite>.png に対応する。画像が無ければ graphics.
 """
 from __future__ import annotations
 
-from components.ai import HostileEnemy, RLEnemy
+from components.ai import BossAI, HostileEnemy, RLEnemy
 from components.consumable import (
     ConfusionConsumable,
     FoodConsumable,
@@ -54,6 +54,17 @@ slime = Entity(
     ai_cls=HostileEnemy,
     fighter=Fighter(hp=18, defense=1, power=6),
     level=Level(xp_given=50),
+)
+
+# ボス：3×3マスを占有する大型の敵。ボスフロアの主。
+boss = Entity(
+    sprite="boss",
+    name="ゴブリンロード",
+    blocks_movement=True,
+    ai_cls=BossAI,
+    fighter=Fighter(hp=120, defense=3, power=12),
+    level=Level(xp_given=300),
+    size=3,
 )
 
 # --- アイテム（blocks_movement=False：床に置かれ、踏むと拾える）---

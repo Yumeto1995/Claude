@@ -38,6 +38,7 @@ class Entity:
         item_category: Optional["ItemCategory"] = None,
         count: int = 1,
         shelf_life=None,
+        size: int = 1,
         skills=None,
         nutrition=None,
         dialogue=None,
@@ -89,6 +90,8 @@ class Entity:
         # 腐敗：shelf_life=腐るまでのターン数（None=腐らない）、freshness=残り鮮度。
         self.shelf_life = shelf_life
         self.freshness = shelf_life
+        # 占有マス数（大型ボス用）。size=3 なら (x,y) を左上に 3×3 を占有する。
+        self.size = size
         # 一時的な状態効果（料理バフなど）。主にプレイヤーが使う。
         self.status_effects = []
         # 村のNPC用のセリフ（リスト）。NPC以外は None。

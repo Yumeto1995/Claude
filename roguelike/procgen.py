@@ -214,6 +214,53 @@ def generate_dungeon(
     return dungeon
 
 
+def _carve_wide_h(dungeon: GameMap, x1: int, x2: int, y: int, half: int = 1) -> None:
+    """y を中心に高さ (2*half+1) の横通路を掘る（大型ボスが通れる幅）。"""
+    for x in range(min(x1, x2), max(x1, x2) + 1):
+        for dy in range(-half, half + 1):
+            if dungeon.in_bounds(x, y + dy):
+                dungeon.tiles[x, y + dy] = tile_types.floor
+
+
+def generate_boss_floor(
+    map_width: int, map_height: int, player: Entity, floor: int
+) -> GameMap:
+    """ボスフロア：入口室→幅広通路→ボスアリーナ→幅広通路→出口室（下り階段）。
+
+    セーフルーム無し・上り階段無し（戻れない）。主は 3×3 マスの大型ボス。
+    通路はボスが通れる幅（3マス）で掘る。
+    """
+    dungeon = GameMap(map_width, map_height)
+    dungeon.entities.append(player)
+    dungeon.boss_floor = True
+    cy = map_height // 2
+
+    ent = RectangularRoom(3, cy - 4, 8, 8)
+    arena = RectangularRoom(map_width // 2 - 8, cy - 8, 16, 16)
+    exit_room = RectangularRoom(map_width - 12, cy - 4, 8, 8)
+    for r in (ent, arena, exit_room):
+        dungeon.tiles[r.inner] = tile_types.floor
+        dungeon.rooms.append((r.x1, r.y1, r.x2, r.y2))
+
+    # 幅広（3マス）通路で横につなぐ＝ボスも通れる
+    _carve_wide_h(dungeon, ent.center[0], arena.center[0], cy, half=1)
+    _carve_wide_h(dungeon, arena.center[0], exit_room.center[0], cy, half=1)
+
+    # 入場位置（入口室）。上り階段は置かない＝戻れない（boss_floor フラグで使用不可）。
+    player.x, player.y = ent.center
+    dungeon.upstairs_location = ent.center
+    # 下り階段（出口室）で先へ進む
+    dungeon.tiles[exit_room.center] = tile_types.down_stairs
+    dungeon.downstairs_location = exit_room.center
+
+    # ボス（3×3）をアリーナ中央に（中心がアリーナ中央になるよう左上を置く）
+    bcx, bcy = arena.center
+    boss = entity_factories.boss.spawn(bcx - 1, bcy - 1)
+    _scale_monster(boss, floor)
+    dungeon.entities.append(boss)
+    return dungeon
+
+
 def nonsafe_connected(dungeon: GameMap) -> bool:
     """セーフルームを除いた床（＝モンスターが動ける範囲）が一つに繋がっているか。
 

@@ -17,7 +17,7 @@ from actions import EscapeAction
 from fov import DEFAULT_RADIUS, compute_fov
 from input_handlers import dispatch_event
 from message_log import MessageLog
-from procgen import generate_dungeon, nonsafe_connected
+from procgen import generate_boss_floor, generate_dungeon, nonsafe_connected
 
 
 class Engine:
@@ -75,8 +75,12 @@ class Engine:
         self.floors = {}
         self.enter_village()  # ゲームは村から始まる
 
+    BOSS_INTERVAL = 5  # この階数ごとにボスフロア（5,10,15…）
+
     def _build_floor(self, floor: int) -> "GameMap":
-        """指定階のダンジョンを生成して返す（連結を検証）。"""
+        """指定階のダンジョンを生成して返す。BOSS_INTERVAL の倍数はボスフロア。"""
+        if floor % self.BOSS_INTERVAL == 0:
+            return generate_boss_floor(self.width, self.height, self.player, floor)
         max_monsters = min(2 + (floor - 1) // 2, 6)  # 深いほど敵が増える
         dungeon = None
         for _ in range(20):
@@ -212,10 +216,15 @@ class Engine:
     def use_stairs(self) -> None:
         """足元の階段を使う。上り階段→前の階（1階なら村）、下り階段→次の階。"""
         pos = (self.player.x, self.player.y)
-        if pos == self.game_map.upstairs_location:
-            self.ascend()
-        elif pos == self.game_map.downstairs_location:
+        if pos == self.game_map.downstairs_location:
             self.descend()
+        elif pos == self.game_map.upstairs_location:
+            if getattr(self.game_map, "boss_floor", False):
+                self.message_log.add_message(
+                    "ここからは戻れない。ボスを倒して先へ進もう。", colors.NO_EFFECT
+                )
+            else:
+                self.ascend()
         else:
             self.message_log.add_message("ここには階段がない。", colors.NO_EFFECT)
 
@@ -549,26 +558,36 @@ class Engine:
         self.message_log.add_message(f"{label}を建てた（-{cost}）。", colors.ITEM)
 
     def camp_remove(self) -> None:
-        """足元の農場設備を撤去する。建設に使った分（経験値 or アイテム）が戻る。"""
+        """足元の農場設備を撤去する。設置物本体（経験値/アイテム）と、牧柵・いけすの
+        中の動物/魚はアイテムで戻る。畑の作物は失われる。"""
         pos = (self.player.x, self.player.y)
         obj = self.camp_objects.get(pos)
         if obj is None:
             self.message_log.add_message("ここに撤去できる設備はない。", colors.NO_EFFECT)
             return
-        label, cost, _spr, _zone, item = camp_map.BUILDABLE[obj["kind"]]
+        kind, content = obj["kind"], obj["content"]
+        label, cost, _spr, _zone, item = camp_map.BUILDABLE[kind]
         del self.camp_objects[pos]
-        if item is not None:                 # アイテム設置物は本体を回収（持ち物に空きがあれば）
-            inv = self.player.inventory
+        inv = self.player.inventory
+        livestock = {"ニワトリ": entity_factories.chicken, "ウシ": entity_factories.cow,
+                     "魚": entity_factories.fish}
+        recovered = []
+        # 牧柵/いけすの中身（動物・魚）はアイテムで返す（畑の作物は失われる）
+        if content is not None and kind in ("pen", "tank"):
+            tmpl = livestock.get(content.get("src"))
+            if tmpl is not None and len(inv.items) < inv.capacity:
+                inv.items.append(tmpl.spawn(0, 0))
+                recovered.append(content["src"])
+        # 設置物本体：アイテム建設は本体を、経験値建設は同額を戻す
+        if item is not None:
             if len(inv.items) < inv.capacity:
                 inv.items.append(entity_factories.sprinkler.spawn(0, 0))
-                self.message_log.add_message(f"{label}を撤去し、回収した。", colors.ITEM)
-            else:
-                self.message_log.add_message(
-                    f"{label}を撤去した（持ち物が一杯で回収できず）。", colors.NO_EFFECT
-                )
-        else:                                # 経験値建設は同額を払い戻し
+                recovered.append(label)
+        else:
             self.player.level.add_xp(cost)
-            self.message_log.add_message(f"{label}を撤去した（+{cost} 戻った）。", colors.ITEM)
+            recovered.append(f"経験値+{cost}")
+        note = f"（{'・'.join(recovered)}を回収）" if recovered else ""
+        self.message_log.add_message(f"{label}を撤去した{note}。", colors.ITEM)
 
     def _tick_status_effects(self) -> None:
         """料理バフなどの一時効果を1ターン分減らし、切れたら外す。"""
