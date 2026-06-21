@@ -23,6 +23,9 @@ from actions import (
     MovementAction,
     PickupAction,
     RangedAttackAction,
+    BeginThrowAction,
+    ThrowItemAction,
+    CancelThrowAction,
     ShopBuyAction,
     ShopCloseAction,
     ShopMoveCursorAction,
@@ -142,6 +145,15 @@ def dispatch_event(event: pygame.event.Event, engine: "Engine") -> Optional[Acti
                 return ToggleFireModeAction()
             return None
 
+        # 投げモード中：方向キーで投げる、ESC で中止（他キーは無視）
+        if getattr(engine, "throw_item", None) is not None:
+            if key in _DIRECTIONS:
+                dx, dy = _DIRECTIONS[key]
+                return ThrowItemAction(dx, dy)
+            if key == pygame.K_ESCAPE:
+                return CancelThrowAction()
+            return None
+
         # 攻撃モードの方向キーは1押し1攻撃（連打防止のため単発で扱う）
         if key in _DIRECTIONS and engine.attack_mode:
             dx, dy = _DIRECTIONS[key]
@@ -211,12 +223,14 @@ def _inventory_keys(key: int, engine: "Engine") -> Optional[Action]:
     if key in (pygame.K_DOWN, pygame.K_s, pygame.K_j):
         return MoveInventoryCursorAction(1)
 
-    # Enter でカーソル位置のアイテムを使用/装備
-    if key in (pygame.K_RETURN, pygame.K_KP_ENTER):
+    # t で投げる、Enter で使用/装備（どちらもカーソル位置のアイテム）
+    if key in (pygame.K_t, pygame.K_RETURN, pygame.K_KP_ENTER):
         category = item_category.ORDER[engine.inventory_category]
         items = item_category.items_in(engine.player.inventory.items, category)
         if items:
             index = min(engine.inventory_cursor, len(items) - 1)
+            if key == pygame.K_t:
+                return BeginThrowAction(items[index])
             return UseItemAction(items[index])
     return None
 
@@ -236,7 +250,9 @@ def held_movement_action(engine: "Engine") -> Optional[Action]:
         if (getattr(engine, "dialogue", None) is not None
                 or getattr(engine, "shop_kind", None) is not None):
             return None  # 会話中・買い物中は歩けない
-    elif engine.attack_mode or engine.inventory_open or getattr(engine, "fire_mode", False):
+    elif (engine.attack_mode or engine.inventory_open
+          or getattr(engine, "fire_mode", False)
+          or getattr(engine, "throw_item", None) is not None):
         return None
     # 押されている方向キーを合成（↑＋→ などで斜め移動）
     keys = pygame.key.get_pressed()

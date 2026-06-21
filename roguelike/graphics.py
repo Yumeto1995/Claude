@@ -1244,7 +1244,7 @@ class Renderer:
         # フッター：操作ヒント
         fy = y + height - 32
         pygame.draw.line(screen, self.FRAME_DARK, (x + 10, fy - 4), (x + width - 10, fy - 4), 1)
-        self._text("←→：分類　↑↓：選択　Enter：使用/装備　i：閉じる",
+        self._text("←→：分類　↑↓：選択　Enter：使用/装備　t：投げる　i：閉じる",
                    x + 18, fy, color=self.TEXT_DIM, shadow=False)
 
     @staticmethod
@@ -1595,6 +1595,8 @@ class Renderer:
                                   colors.DESCEND, right_align=True) + 8
             if getattr(engine, "fire_mode", False):
                 self._draw_chip("射撃方向？", rx, y - 2, (255, 205, 90), right_align=True)
+            elif getattr(engine, "throw_item", None) is not None:
+                self._draw_chip("投げる方向？", rx, y - 2, (255, 205, 90), right_align=True)
             elif engine.attack_mode:
                 self._draw_chip("攻撃モード", rx, y - 2, (255, 130, 130), right_align=True)
             else:

@@ -29,6 +29,7 @@ class Engine:
         self.game_over = False
         self.attack_mode = False     # True なら方向キーで攻撃、False なら移動
         self.fire_mode = False       # True なら次の方向キーで弓を撃つ（射撃モード）
+        self.throw_item = None       # not None ならそのアイテムを次の方向キーで投げる
         self.inventory_open = False  # 持ち物メニューを開いているか
         self.inventory_category = 0  # 持ち物メニューで選択中の分類タブ
         self.inventory_cursor = 0    # 持ち物メニューで選択中の行（カーソル位置）

@@ -525,3 +525,87 @@ class RangedAttackAction(ActionWithDirection):
         engine.pending_fx.append(("flash", target))
         engine.pending_fx.append(("popup", target.x, target.y, f"-{damage}", (255, 240, 140)))
         combat.inflict_damage(engine, target, damage, attacker=entity)
+
+
+# --- アイテム投擲 ---------------------------------------------------------
+THROW_RANGE = 6          # 投げが届く最大マス数
+THROW_BASE_POWER = 3     # 投擲の基礎威力（武器なら power_bonus を加算）
+
+
+class BeginThrowAction(Action):
+    """持ち物で選んだアイテムを投げる体勢に入る（次の方向キーで投げる）。"""
+
+    consumes_turn = False
+
+    def __init__(self, item: Entity):
+        self.item = item
+
+    def perform(self, engine: Engine, entity: Entity) -> None:
+        engine.inventory_open = False
+        engine.throw_item = self.item
+        engine.message_log.add_message(
+            f"{self.item.name} を投げる方向を選択（ESC で中止）。", colors.WELCOME
+        )
+
+
+class CancelThrowAction(Action):
+    """投げる体勢を中止する。"""
+
+    consumes_turn = False
+
+    def perform(self, engine: Engine, entity: Entity) -> None:
+        engine.throw_item = None
+
+
+class ThrowItemAction(ActionWithDirection):
+    """選んだアイテムを (dx, dy) 方向へ投げる。直線上で最初に当たった敵に命中。"""
+
+    is_attack = True
+
+    def perform(self, engine: Engine, entity: Entity) -> None:
+        item = getattr(engine, "throw_item", None)
+        engine.throw_item = None
+        if item is None or (self.dx == 0 and self.dy == 0):
+            self.consumes_turn = False
+            return
+
+        # 直線を走査：壁/マップ端で停止、最初の戦える相手に命中
+        gm = engine.game_map
+        x, y = entity.x, entity.y
+        path = []
+        target = None
+        for _ in range(THROW_RANGE):
+            x += self.dx
+            y += self.dy
+            if not gm.in_bounds(x, y) or not gm.tiles["walkable"][x, y]:
+                break
+            path.append((x, y))
+            blocker = gm.get_blocking_entity_at(x, y)
+            if blocker is not None and blocker.fighter is not None:
+                target = blocker
+                break
+
+        engine.pending_fx.append(("arrow", entity.x, entity.y, self.dx, self.dy, list(path)))
+
+        # 投げたぶんを1個消費（スタックは1減、最後の1個は持ち物から除去）
+        if getattr(item, "count", 1) > 1:
+            item.count -= 1
+        elif entity.inventory is not None and item in entity.inventory.items:
+            entity.inventory.items.remove(item)
+
+        if target is None:
+            engine.message_log.add_message(f"{item.name} を投げたが外れた。", colors.NO_EFFECT)
+            return
+
+        eqp = getattr(item, "equippable", None)
+        base = THROW_BASE_POWER + (eqp.power_bonus if eqp is not None else 0)
+        damage = max(1, base - target.fighter.defense)
+        if target.fighter.is_hungry:
+            damage = max(1, int(damage * HUNGER_DAMAGE_MULT))
+        attack_color = colors.PLAYER_ATK if entity is engine.player else colors.ENEMY_ATK
+        engine.message_log.add_message(
+            f"{item.name} を投げて {target.name} に {damage} ダメージ！", attack_color
+        )
+        engine.pending_fx.append(("flash", target))
+        engine.pending_fx.append(("popup", target.x, target.y, f"-{damage}", (255, 240, 140)))
+        combat.inflict_damage(engine, target, damage, attacker=entity)
