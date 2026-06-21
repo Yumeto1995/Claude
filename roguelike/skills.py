@@ -17,6 +17,7 @@ from typing import Dict, List, Tuple
 
 POINTS_PER_LEVEL = 1   # レベルアップ1回で得るスキルポイント
 TIERS = 3              # 各系統の段数
+MEDICINE_XP_COST = 1000  # 医術「自己診断」の習得に必要な経験値（お金）
 
 # 系統キー → (表示名, 各段の効果説明)
 BRANCHES: List[Tuple[str, str]] = [
@@ -29,6 +30,7 @@ BRANCHES: List[Tuple[str, str]] = [
     ("ranch", "酪農"),
     ("alchemy", "錬金"),
     ("magic", "魔法"),
+    ("medicine", "医術"),
 ]
 BRANCH_KEYS = [b for b, _ in BRANCHES]
 BRANCH_LABEL = dict(BRANCHES)
@@ -45,6 +47,7 @@ TIER_DESC = {
     "ranch": ["産出-15%", "産出-30%", "産出-45%"],
     "alchemy": ["おまけ20%", "おまけ40%", "おまけ60%"],
     "magic": ["威力+20%", "威力+40%", "威力+70%"],
+    "medicine": ["自己診断", "—", "—"],
 }
 TIER_NAME = ["心得", "鍛錬", "極意"]
 
@@ -77,6 +80,7 @@ class Skills:
     def __init__(self):
         self.unlocked = set()      # 解放済みノードID
         self.points = 0            # 未使用ポイント
+        self.self_diagnosis = False  # 医術「自己診断」：経験値で習得・恒久（巻戻し対象外）
         # レベル → (frozenset(unlocked), points) のスナップショット
         self.snapshots: Dict[int, Tuple[frozenset, int]] = {1: (frozenset(), 0)}
 
@@ -100,11 +104,17 @@ class Skills:
 
     # ---- 解放 ----
     def is_unlocked(self, branch: str, tier: int) -> bool:
+        if branch == "medicine":
+            return tier == 0 and getattr(self, "self_diagnosis", False)
         return node_id(branch, tier) in self.unlocked
 
     def can_unlock(self, branch: str, tier: int) -> bool:
         if self.is_unlocked(branch, tier):
             return False
+        if branch == "medicine":
+            # 自己診断（心得のみ）。経験値（お金）1000 で習得。
+            lvl = getattr(self.entity, "level", None)
+            return tier == 0 and lvl is not None and lvl.wealth() >= MEDICINE_XP_COST
         if self.points < 1:
             return False
         if tier > 0 and not self.is_unlocked(branch, tier - 1):
@@ -112,6 +122,8 @@ class Skills:
         return True
 
     def unlock(self, branch: str, tier: int, current_level: int) -> bool:
+        if branch == "medicine":
+            return False  # 医術は経験値で習得（engine.skill_unlock が処理）
         if not self.can_unlock(branch, tier):
             return False
         self.unlocked.add(node_id(branch, tier))

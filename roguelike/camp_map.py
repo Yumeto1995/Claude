@@ -18,6 +18,7 @@ STATIONS = {
     (5, 3): "cooking",
     (7, 3): "alchemy",
     (9, 3): "health",
+    (11, 3): "skill",
     (24, 28): "exit",
 }
 
@@ -33,6 +34,7 @@ STATION_LABELS = {
     "cooking": "料理（かまど）",
     "alchemy": "アイテム錬金",
     "health": "体調を調べる",
+    "skill": "魔法陣（スキル振り分け）",
     "exit": "ダンジョンに戻る",
 }
 

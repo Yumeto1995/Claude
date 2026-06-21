@@ -29,7 +29,7 @@ player = Entity(
     blocks_movement=True,
     fighter=Fighter(hp=30, defense=2, power=5, max_stamina=100, max_satiety=100),
     level=Level(level_up_base=50, level_up_factor=100),
-    inventory=Inventory(capacity=12),
+    inventory=Inventory(capacity=36),
     equipment=Equipment(),
     skills=Skills(),
     nutrition=Nutrition(),

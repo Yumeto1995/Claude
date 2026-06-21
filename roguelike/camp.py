@@ -128,8 +128,11 @@ def info(engine: "Engine") -> List[str]:
     if menu == "health":
         nut = engine.player.nutrition
         if nut.deficient:
-            syms = "・".join(nutrition.SYMPTOMS[k] for k in nutrition.KEYS if k in nut.deficient)
-            return [f"気になる症状: {syms}", "不足している栄養を含む食事で改善する。"]
+            sk = engine.player.skills
+            if getattr(sk, "self_diagnosis", False):
+                syms = "・".join(nutrition.SYMPTOMS[k] for k in nutrition.KEYS if k in nut.deficient)
+                return [f"自己診断: {syms}", "不足している栄養を含む食事で改善する。"]
+            return ["どうも体調が優れない…", "最近の食事に偏りがないか見直してみよう。"]
         if nut.is_good:
             return ["栄養バランス良好＝好調！（攻+1 防+1 スタミナ回復↑）"]
         return ["大きな偏りはなし。バランスよく食べよう。"]

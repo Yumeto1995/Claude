@@ -345,6 +345,22 @@ class Engine:
         branch = skills.BRANCH_KEYS[self.skill_branch]
         tier = self.skill_tier
         name = skills.node_name(branch, tier)
+        if branch == "medicine":
+            if tier != 0:
+                self.message_log.add_message("医術はこれ以上修められない。", colors.NO_EFFECT)
+            elif getattr(sk, "self_diagnosis", False):
+                self.message_log.add_message("『自己診断』は習得済み。", colors.NO_EFFECT)
+            elif self.player.level.wealth() < skills.MEDICINE_XP_COST:
+                self.message_log.add_message(
+                    f"経験値が足りない（自己診断には {skills.MEDICINE_XP_COST} 必要）。",
+                    colors.NO_EFFECT)
+            else:
+                self.player.level.spend_xp(skills.MEDICINE_XP_COST, self.player.fighter)
+                sk.self_diagnosis = True
+                self.message_log.add_message(
+                    "スキル『自己診断』を習得した！体調の異変が自分で分かるようになった。",
+                    colors.LEVEL_UP)
+            return
         if sk.unlock(branch, tier, self.player.level.current_level):
             self.message_log.add_message(
                 f"スキル『{name}』を習得した！", colors.LEVEL_UP
@@ -385,6 +401,9 @@ class Engine:
         kind = camp_map.STATIONS.get(pos)
         if kind == "exit":
             self.leave_camp()
+            return
+        if kind == "skill":
+            self.toggle_skill_tree()
             return
         if kind == "cooking":
             self.camp_menu, self.camp_cursor, self.cook_pot = "cook", 0, []
@@ -605,15 +624,24 @@ class Engine:
         if nut is None:
             return
         nut.decay()
-        for _key, kind, symptom in nut.update_symptoms():
-            if kind == "onset":
+        # 症状名・原因は伏せる。ただし医術「自己診断」を習得していれば具体的に知らせる
+        changes = nut.update_symptoms()
+        sk = self.player.skills
+        if getattr(sk, "self_diagnosis", False):
+            for _key, kind, symptom in changes:
+                if kind == "onset":
+                    self.message_log.add_message(
+                        f"自己診断：『{symptom}』の症状が出ている。", colors.PLAYER_DIE)
+                else:
+                    self.message_log.add_message(
+                        f"自己診断：『{symptom}』が治まった。", colors.HEAL)
+        else:
+            if any(kind == "onset" for _k, kind, _s in changes):
                 self.message_log.add_message(
-                    f"栄養が偏っている…『{symptom}』の症状が出てきた。", colors.PLAYER_DIE
-                )
-            else:
+                    "なんだか体調が悪くなってきた…", colors.PLAYER_DIE)
+            if any(kind == "recover" for _k, kind, _s in changes):
                 self.message_log.add_message(
-                    f"栄養が戻り『{symptom}』が治まった。", colors.HEAL
-                )
+                    "体調が少し良くなってきた。", colors.HEAL)
 
     def item_under_player(self):
         """プレイヤーが乗っている床のアイテムを返す。なければ None。"""

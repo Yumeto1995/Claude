@@ -169,6 +169,7 @@ PLACEHOLDER_COLORS: Dict[str, tuple] = {
     "st_fishery": (90, 150, 210),
     "st_exit": (120, 220, 255),
     "st_health": (225, 120, 120),
+    "st_skill": (198, 130, 250),
     "farm_empty": (110, 80, 55),
     "farm_grow": (120, 170, 90),
     "farm_ready": (230, 220, 90),
@@ -744,6 +745,8 @@ class Renderer:
             self._render_panel(engine)
             if engine.camp_menu is not None:
                 self._render_camp_menu(engine)
+            if getattr(engine, "skill_open", False):
+                self._render_skill_tree(engine)
             pygame.display.flip()
             return
 

@@ -8,7 +8,8 @@ if TYPE_CHECKING:
 # スタミナ・満腹度の調整値（ここを変えればバランス調整できる）
 DEFAULT_ATTACK_STAMINA_COST = 30  # 武器未装備（素手）時の攻撃消費スタミナ
 STAMINA_REGEN = 12                # 攻撃以外のターンで回復するスタミナ
-SATIETY_DRAIN = 1                 # 1ターンに減る満腹度
+SATIETY_DRAIN = 1                 # 満腹度が1回に減る量
+SATIETY_DRAIN_INTERVAL = 3        # このターン数ごとに1回だけ減る（大きいほど空腹になりにくい）
 HUNGER_STAMINA_MULT = 1.5         # 空腹時の攻撃消費スタミナ倍率
 HUNGER_DAMAGE_MULT = 1.5          # 空腹時に受けるダメージ倍率
 
@@ -95,8 +96,12 @@ class Fighter:
         return self.max_satiety > 0 and self.satiety <= 0
 
     def drain_satiety(self) -> None:
-        """1ターン分、満腹度を減らす。"""
+        """満腹度を減らす（SATIETY_DRAIN_INTERVAL ターンに1回だけ減る）。"""
         if self.max_satiety > 0:
+            self._satiety_tick = getattr(self, "_satiety_tick", 0) + 1
+            if self._satiety_tick < SATIETY_DRAIN_INTERVAL:
+                return
+            self._satiety_tick = 0
             nut = getattr(self.entity, "nutrition", None)   # 炭水化物欠乏で減りが速い
             extra = nut.satiety_drain_add if nut is not None else 0
             self.satiety = max(0, self.satiety - SATIETY_DRAIN - extra)
