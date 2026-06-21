@@ -222,6 +222,9 @@ bait = Entity(sprite="material", name="エサ", blocks_movement=False,
 # 飼料：畜産フォークでの餌やりに消費する（木の実から錬金で作る）
 feed = Entity(sprite="feed", name="飼料", blocks_movement=False,
               item_category=ItemCategory.MATERIAL)
+# スプリンクラー：購入/クラフトで入手し、建設モードのトンカチで設置（撤去で回収）
+sprinkler = Entity(sprite="sprinkler", name="スプリンクラー", blocks_movement=False,
+                   item_category=ItemCategory.MATERIAL)
 
 # 料理は固定テンプレートではなく cooking.cook() が動的に生成する。
 

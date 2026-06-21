@@ -36,12 +36,15 @@ STATION_LABELS = {
     "exit": "ダンジョンに戻る",
 }
 
-# 自由配置で建てられる農場設備： kind -> (表示名, 建設費=経験値, 空き状態スプライト, 必要開放区画)
+# 自由配置で建てられる農場設備：
+#   kind -> (表示名, 建設費=経験値, 空き状態スプライト, 必要開放区画, 消費アイテム名)
+# 消費アイテム名が None なら経験値で建設、指定があればそのアイテムを1消費して設置する。
 BUILDABLE = {
-    "farm": ("畑", 20, "farm_empty", None),
-    "pen":  ("牧柵", 40, "st_ranch", "ranch"),
-    "tank": ("いけす", 40, "st_fishery", "fishery"),
-    "sprinkler": ("スプリンクラー", 60, "sprinkler", None),  # 隣接する畑を自動で水やり
+    "farm": ("畑", 20, "farm_empty", None, None),
+    "pen":  ("牧柵", 40, "st_ranch", "ranch", None),
+    "tank": ("いけす", 40, "st_fishery", "fishery", None),
+    # スプリンクラーは購入/クラフトした「スプリンクラー」アイテムを設置（隣接畑を自動水やり）
+    "sprinkler": ("スプリンクラー", 0, "sprinkler", None, "スプリンクラー"),
 }
 
 # 建設モードの道具（b で切替 / 1-6 で直接選択 / Enter で使用）。

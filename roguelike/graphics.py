@@ -1049,7 +1049,10 @@ class Renderer:
                 screen.blit(pygame.transform.smoothscale(icon, (28, 28)),
                             (10, self.play_h - 40))
                 cx = 44
-            cost = f"({camp_map.BUILDABLE[tool['kind']][1]})" if tool["act"] == "build" else ""
+            cost = ""
+            if tool["act"] == "build":
+                b = camp_map.BUILDABLE[tool["kind"]]
+                cost = f"(要:{b[4]})" if b[4] else f"({b[1]})"
             self._draw_chip(f"{tool['name']}{cost}  Enter使用 / b・1-7切替 / ESC終了",
                             cx, self.play_h - 36, (255, 205, 90))
         elif engine.camp_menu is None:

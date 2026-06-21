@@ -19,6 +19,7 @@ WARES = {
         (ef.healing_potion, 30),
         (ef.lightning_scroll, 70),
         (ef.confusion_scroll, 55),
+        (ef.sprinkler, 80),       # 畑を自動水やりする設置物（建設モードで設置）
     ],
     "weapon": [
         (ef.dagger, 40),

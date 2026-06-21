@@ -467,7 +467,10 @@ class Engine:
             self.message_log.add_message("建設モードを終了した。", colors.NO_EFFECT)
             return
         tool = camp_map.TOOLS[self.camp_tool]
-        hint = f"（{camp_map.BUILDABLE[tool['kind']][1]}）" if tool["act"] == "build" else ""
+        hint = ""
+        if tool["act"] == "build":
+            b = camp_map.BUILDABLE[tool["kind"]]
+            hint = f"（要:{b[4]}）" if b[4] else f"（{b[1]}）"
         self.message_log.add_message(
             f"道具：{tool['name']}{hint}  Enter=使用 / b・1-7=切替 / ESC=終了",
             colors.WELCOME,
@@ -515,34 +518,57 @@ class Engine:
         self.message_log.add_message(f"{verb}した。{what}が進んだ{suffix}。", colors.ITEM)
 
     def camp_build(self, kind: str) -> None:
-        """足元の空きマスに農場設備を建てる（経験値を支払う）。"""
+        """足元の空きマスに農場設備を建てる（経験値 or アイテムを消費）。"""
         pos = (self.player.x, self.player.y)
         if pos in camp_map.STATIONS or pos in self.camp_objects:
             self.message_log.add_message("ここには建てられない。", colors.NO_EFFECT)
             return
-        label, cost, _spr, zone = camp_map.BUILDABLE[kind]
+        label, cost, _spr, zone, item = camp_map.BUILDABLE[kind]
         if zone is not None and zone not in self.unlocked_zones:
             key = "牧場の鍵" if zone == "ranch" else "漁業の鍵"
             self.message_log.add_message(
                 f"{label}はまだ建てられない。『{key}』で区画を開放しよう。", colors.NO_EFFECT
             )
             return
-        if not self.player.level.spend_xp(cost, self.player.fighter):
+        if item is not None:                 # アイテムを消費して設置（例：スプリンクラー）
+            inv = self.player.inventory.items
+            held = next((it for it in inv if it.name == item), None)
+            if held is None:
+                self.message_log.add_message(
+                    f"{label}を持っていない（道具屋で購入 / 錬金で作成）。", colors.NO_EFFECT
+                )
+                return
+            inv.remove(held)
+            self.camp_objects[pos] = {"kind": kind, "content": None}
+            self.message_log.add_message(f"{label}を設置した。", colors.ITEM)
+            return
+        if not self.player.level.spend_xp(cost, self.player.fighter):   # 経験値で建設
             self.message_log.add_message("お金（経験値）が足りない。", colors.NO_EFFECT)
             return
         self.camp_objects[pos] = {"kind": kind, "content": None}
         self.message_log.add_message(f"{label}を建てた（-{cost}）。", colors.ITEM)
 
     def camp_remove(self) -> None:
-        """足元の農場設備を撤去する（中身があっても消える）。"""
+        """足元の農場設備を撤去する。建設に使った分（経験値 or アイテム）が戻る。"""
         pos = (self.player.x, self.player.y)
         obj = self.camp_objects.get(pos)
         if obj is None:
             self.message_log.add_message("ここに撤去できる設備はない。", colors.NO_EFFECT)
             return
-        label = camp_map.BUILDABLE[obj["kind"]][0]
+        label, cost, _spr, _zone, item = camp_map.BUILDABLE[obj["kind"]]
         del self.camp_objects[pos]
-        self.message_log.add_message(f"{label}を撤去した。", colors.ITEM)
+        if item is not None:                 # アイテム設置物は本体を回収（持ち物に空きがあれば）
+            inv = self.player.inventory
+            if len(inv.items) < inv.capacity:
+                inv.items.append(entity_factories.sprinkler.spawn(0, 0))
+                self.message_log.add_message(f"{label}を撤去し、回収した。", colors.ITEM)
+            else:
+                self.message_log.add_message(
+                    f"{label}を撤去した（持ち物が一杯で回収できず）。", colors.NO_EFFECT
+                )
+        else:                                # 経験値建設は同額を払い戻し
+            self.player.level.add_xp(cost)
+            self.message_log.add_message(f"{label}を撤去した（+{cost} 戻った）。", colors.ITEM)
 
     def _tick_status_effects(self) -> None:
         """料理バフなどの一時効果を1ターン分減らし、切れたら外す。"""
