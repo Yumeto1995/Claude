@@ -43,6 +43,13 @@ def _die(engine: "Engine", target: "Entity") -> None:
         engine.message_log.add_message(f"{target.name} を倒した！", colors.ENEMY_DIE)
         target.ai = None                 # もう動かない
         target.blocks_movement = False   # 死体はすり抜けられる
+        loot = getattr(target, "loot", None)
+        if loot is not None:             # ボス等のレア報酬を中央の床に落とす
+            half = getattr(target, "size", 1) // 2
+            drop = loot.spawn(target.x + half, target.y + half)
+            engine.game_map.entities.append(drop)
+            engine.message_log.add_message(f"{loot.name} を落とした！", colors.LEVEL_UP)
+        target.size = 1                  # 死体は通常サイズに
         target.name = f"{target.name}の死体"
     target.sprite = "corpse"
 

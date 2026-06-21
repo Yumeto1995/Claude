@@ -203,29 +203,45 @@ class ConfusedEnemy(BaseAI):
 
 
 class BossAI(BaseAI):
-    """3×3 の大型ボス。プレイヤーを追い、フットプリントに隣接したら大振りで攻撃。
+    """3×3 の大型ボス。追跡＋近接に加え、薙ぎ払い(範囲)・突進・取り巻き召喚を使う。
 
     1×1 用の Movement/Melee は使えないため、3×3 をまとめて動かす専用ロジック。
     プレイヤーがボスの9マスのどれかに隣接（外周1マス）したら攻撃する。
     """
 
+    SPECIAL_CHANCE = 0.45  # 特殊行動を試みる確率
+    MAX_SUMMONS = 4        # 召喚で出せる取り巻きの上限
+
+    def __init__(self, entity: "Entity"):
+        super().__init__(entity)
+        self.cd = 0          # 特殊行動のクールダウン
+        self.summons = 0     # これまで召喚した取り巻きの数
+
     def perform(self, engine: "Engine") -> None:
         boss = self.entity
         s = getattr(boss, "size", 3)
         gm = engine.game_map
-        # 自分のどこかが見えていなければ動かない
         if not any(
             gm.in_bounds(boss.x + ox, boss.y + oy) and gm.visible[boss.x + ox, boss.y + oy]
             for ox in range(s) for oy in range(s)
         ):
             return
+        if self.cd > 0:
+            self.cd -= 1
         player = engine.player
-        # プレイヤーが 3×3 の外周（8近傍）に接していれば攻撃
-        if (boss.x - 1 <= player.x <= boss.x + s
-                and boss.y - 1 <= player.y <= boss.y + s):
+        adjacent = (boss.x - 1 <= player.x <= boss.x + s
+                    and boss.y - 1 <= player.y <= boss.y + s)
+        # 特殊行動（クールダウンが明けていれば確率で）：隣接=薙ぎ払い / 遠い=召喚 or 突進
+        if self.cd == 0 and random.random() < self.SPECIAL_CHANCE:
+            if adjacent:
+                self._aoe(engine, boss, player); self.cd = 4; return
+            if self.summons < self.MAX_SUMMONS and random.random() < 0.5:
+                self._summon(engine); self.cd = 6; return
+            self._charge(engine, boss, player); self.cd = 5; return
+        # 通常：隣接なら近接、でなければ1歩接近
+        if adjacent:
             self._attack(engine, boss, player)
             return
-        # 中心から見たプレイヤー方向へ 1 歩（3×3 が通れる方向を順に試す）
         cx, cy = boss.x + s // 2, boss.y + s // 2
         dx = (player.x > cx) - (player.x < cx)
         dy = (player.y > cy) - (player.y < cy)
@@ -250,13 +266,75 @@ class BossAI(BaseAI):
         return True
 
     @staticmethod
-    def _attack(engine: "Engine", boss, player) -> None:
+    def _hit(engine: "Engine", boss, player, mult: float, verb: str) -> None:
         if player.fighter is None or boss.fighter is None:
             return
-        damage = max(1, boss.fighter.power - player.fighter.defense)
-        engine.message_log.add_message(
-            f"{boss.name} の大振り！ {damage} ダメージ", colors.ENEMY_ATK
-        )
+        damage = max(1, int((boss.fighter.power - player.fighter.defense) * mult))
+        engine.message_log.add_message(f"{boss.name} の{verb}！ {damage} ダメージ", colors.ENEMY_ATK)
         engine.pending_fx.append(("flash", player))
         engine.pending_fx.append(("popup", player.x, player.y, f"-{damage}", (255, 90, 90)))
         combat.inflict_damage(engine, player, damage, attacker=boss)
+
+    def _attack(self, engine: "Engine", boss, player) -> None:
+        self._hit(engine, boss, player, 1.0, "大振り")
+
+    def _aoe(self, engine: "Engine", boss, player) -> None:
+        """薙ぎ払い：3×3の外周をなぎ、隣接プレイヤーに1.5倍ダメージ。"""
+        s = getattr(boss, "size", 3)
+        for x in range(boss.x - 1, boss.x + s + 1):
+            for y in range(boss.y - 1, boss.y + s + 1):
+                inside = boss.x <= x < boss.x + s and boss.y <= y < boss.y + s
+                if not inside and engine.game_map.in_bounds(x, y):
+                    engine.pending_fx.append(("slash", x, y, 1, 0))
+        if (boss.x - 1 <= player.x <= boss.x + s and boss.y - 1 <= player.y <= boss.y + s):
+            self._hit(engine, boss, player, 1.5, "薙ぎ払い")
+        else:
+            engine.message_log.add_message(f"{boss.name} が薙ぎ払った！", colors.ENEMY_ATK)
+
+    def _charge(self, engine: "Engine", boss, player) -> None:
+        """突進：プレイヤー方向の主軸へ最大5マス突っ込み、隣接したら一撃。"""
+        s = getattr(boss, "size", 3)
+        cx, cy = boss.x + s // 2, boss.y + s // 2
+        if abs(player.x - cx) >= abs(player.y - cy):
+            dx, dy = (1 if player.x > cx else -1), 0
+        else:
+            dx, dy = 0, (1 if player.y > cy else -1)
+        moved = 0
+        for _ in range(5):
+            if self._can_move(engine, boss, s, dx, dy):
+                boss.x += dx
+                boss.y += dy
+                engine.pending_moves.append((boss, dx, dy))
+                moved += 1
+            else:
+                break
+        if moved:
+            engine.message_log.add_message(f"{boss.name} が突進してきた！", colors.ENEMY_ATK)
+        if (boss.x - 1 <= player.x <= boss.x + s and boss.y - 1 <= player.y <= boss.y + s):
+            self._hit(engine, boss, player, 1.0, "突進")
+
+    def _summon(self, engine: "Engine") -> None:
+        """取り巻き召喚：フットプリント外周の空きマスにゴブリンを最大2体湧かせる。"""
+        import entity_factories
+        from procgen import _scale_monster
+        boss = self.entity
+        s = getattr(boss, "size", 3)
+        gm = engine.game_map
+        ring = [(x, y)
+                for x in range(boss.x - 1, boss.x + s + 1)
+                for y in range(boss.y - 1, boss.y + s + 1)
+                if not (boss.x <= x < boss.x + s and boss.y <= y < boss.y + s)]
+        random.shuffle(ring)
+        placed = 0
+        for x, y in ring:
+            if placed >= 2 or self.summons >= self.MAX_SUMMONS:
+                break
+            if (gm.in_bounds(x, y) and gm.tiles["walkable"][x, y]
+                    and gm.get_blocking_entity_at(x, y) is None):
+                m = entity_factories.goblin.spawn(x, y)
+                _scale_monster(m, engine.current_floor)
+                gm.entities.append(m)
+                placed += 1
+                self.summons += 1
+        if placed:
+            engine.message_log.add_message(f"{boss.name} が取り巻きを呼んだ！", colors.ENEMY_ATK)

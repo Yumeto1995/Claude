@@ -107,6 +107,15 @@ sword = Entity(
     equippable=Equippable(EquipmentType.WEAPON, power_bonus=6, stamina_cost=36),
 )
 
+# ボス撃破報酬：レアな大剣（剣より高火力）。ボスは倒すと床に落とす。
+goblin_greatsword = Entity(
+    sprite="sword",
+    name="ゴブリンロードの大剣",
+    blocks_movement=False,
+    equippable=Equippable(EquipmentType.WEAPON, power_bonus=9, stamina_cost=30),
+)
+boss.loot = goblin_greatsword
+
 # --- 遠距離武器・弾 ---
 # 弓：ranged 枠に装備（近接武器と両立）。矢を1本消費して直線上の最初の敵を射る。
 bow = Entity(
