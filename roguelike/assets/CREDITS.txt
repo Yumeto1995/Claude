@@ -1,0 +1,13 @@
+# アセットのクレジット
+
+このゲームのアイコンの一部は、以下の CC0（パブリックドメイン）素材を利用しています。
+CC0 ライセンス: https://creativecommons.org/publicdomain/zero/1.0/
+
+## 食材アイコン（assets/items/food_*.png）
+OpenGameArt「CC0 Food Icons」より:
+- bluecarrot16 — 肉 / 卵 / チーズ / 果物 / 葉物 / きのこ / 木の実 / パン / 帆立
+- ocal        — 牛乳 / じゃがいも
+- 7soul1      — 魚
+  https://opengameart.org/content/cc0-food-icons
+
+food_bigfish（大魚）と food_honey（蜂蜜）は該当素材が無いため本プロジェクトでコード生成。
