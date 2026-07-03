@@ -315,6 +315,7 @@ class Renderer:
         # オートタイルの合成結果キャッシュ（向き別の壁・床影は隣接状況で決まる）
         self._wall_cache = {}            # (theme, mask, dark) → Surface
         self._floor_cache = {}           # (key, smask, dark) → Surface
+        self._floor_keys_cache = {}      # theme → 床バリアントキーのタプル
 
     CONTROLS = [
         "移動：矢印 / WASD / vi / テンキー（斜め・2方向同時可）",
@@ -682,7 +683,20 @@ class Renderer:
             return self.dark_sprites[key] if dark else self.sprites[key]
         smask = (1 if self._is_wall(gm, tx, ty - 1) else 0) \
             | (2 if self._is_wall(gm, tx - 1, ty) else 0)
-        return self._floor_surface(f"{theme}_floor", smask, dark)
+        key = self._det_pick(tx, ty, self._floor_keys(theme))
+        return self._floor_surface(key, smask, dark)
+
+    def _floor_keys(self, theme: str):
+        """テーマ床のバリアントキー一覧（`{theme}_floor`, `_floor2..5` の在るものだけ）。
+
+        村の草（GRASS_VARIANTS）と同様、複数タイルを座標で決定的に敷き分けて
+        単一タイル反復の格子模様を抑える。バリアントが無ければ従来どおり1枚。"""
+        keys = self._floor_keys_cache.get(theme)
+        if keys is None:
+            cands = [f"{theme}_floor"] + [f"{theme}_floor{n}" for n in range(2, 6)]
+            keys = tuple(k for k in cands if k in self.sprites) or (f"{theme}_floor",)
+            self._floor_keys_cache[theme] = keys
+        return keys
 
     def _is_safe_wall(self, gm, tx: int, ty: int) -> bool:
         """セーフルームの床に隣接する壁か（8近傍）。＝ログハウスの内壁にする。"""
@@ -785,7 +799,8 @@ class Renderer:
                     sprite = self._whiten(sprite, flash)  # 被弾フラッシュ
                 if entity.blocks_movement:  # 生きたキャラには足元影
                     self._draw_shadow(sx, sy)
-                screen.blit(sprite, (sx, sy))
+                # 手続き的モーション（呼吸・歩行の跳ね）を上下オフセットで加える
+                screen.blit(sprite, (sx, sy + self._sprite_motion(entity)))
 
         # 斬撃・ダメージ数字はエンティティの上に重ねる
         self._draw_fx(engine, cam_x, cam_y)
@@ -1272,6 +1287,11 @@ class Renderer:
     # これを毎マス交互の足で繰り返すと「右足・左足」の歩行に見える。
     STEP_DT = 0.13   # 1歩の見かけ時間(秒)。踏み出し時刻からの経過で位相を取る
     PASS_AT = 0.6    # 位相がこの割合を超えたら passing（足をそろえる）に切替
+    # 手続き的モーション（画像に依存しない“生き感”）。歩行=跳ね／静止=呼吸。
+    # ベース画像1枚でも動くので、仮画像でも本番画像でもそのまま効く。
+    IDLE_BOB = 2.2   # 静止時に上下する最大px（呼吸）
+    IDLE_FREQ = 3.1  # 呼吸の速さ(rad/s)
+    WALK_HOP = 5.0   # 歩行1歩で跳ねる最大px
 
     @staticmethod
     def _dir_from(dx: int, dy: int) -> str:
@@ -1308,6 +1328,24 @@ class Renderer:
                     return r
         # idle：向きだけ反映
         return self._resolve(key, d, "") or key
+
+    def _sprite_motion(self, entity) -> float:
+        """スプライトに与える上下オフセット(px)。画像に依存せず“生き感”を出す。
+
+        歩行＝1歩ごとにひょこっと跳ね／静止＝ゆっくり呼吸で上下／攻撃＝0（踏み込みは
+        attack_off 側で表現）。生きたキャラ（blocks_movement）だけが動き、死体・アイテム
+        は静止。影は足元（sy）に固定なので、跳ねると接地して見える。"""
+        if not entity.blocks_movement:
+            return 0.0
+        eid = id(entity)
+        if eid in self.attacking:
+            return 0.0
+        if eid in self.walking:
+            t = (self.now - self.step_t0.get(eid, self.now)) / self.STEP_DT
+            return -self.WALK_HOP * abs(math.sin(min(t, 1.0) * math.pi))
+        # 静止：個体ごとに位相をずらし、一斉に動かないようにする
+        phase = (eid % 1000) / 1000.0 * math.tau
+        return -self.IDLE_BOB * (0.5 + 0.5 * math.sin(self.now * self.IDLE_FREQ + phase))
 
     def _draw_shadow(self, px: float, py: float) -> None:
         """キャラの足元に落ちる楕円影（接地感を出す）。"""

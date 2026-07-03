@@ -429,24 +429,43 @@ def pixelate(s, block=PIX_BLOCK):
 
 
 # ============================================================ 出力
+# 出力先はキー名の接頭辞でサブフォルダへ振り分ける（characters/ monsters/ items/）。
+_SUBDIR = (
+    ("player", "characters/player"),
+    ("npc", "characters/npc"),
+    ("goblin", "monsters/goblin"),
+    ("slime", "monsters/slime"),
+    ("corpse", "items"),
+)
+
+
+def _dest_dir(name):
+    for prefix, sub in _SUBDIR:
+        if name == prefix or name.startswith(prefix + "_"):
+            return os.path.join(ASSETS_DIR, sub)
+    return ASSETS_DIR
+
+
 def _save(s, name):
-    pygame.image.save(pixelate(s), os.path.join(ASSETS_DIR, f"{name}.png"))
+    d = _dest_dir(name)
+    os.makedirs(d, exist_ok=True)
+    pygame.image.save(pixelate(s), os.path.join(d, f"{name}.png"))
 
 
 def generate():
-    POSE_SUFFIX = {"idle": "", "walk1": "_walk1", "walk2": "_walk2", "attack": "_attack"}
+    # 手続き的アニメ（graphics.py）が歩行hop・攻撃踏み込み・アイドルbobを付与するので、
+    # 仮画像は「方向別のベース1枚」だけでよい（_walk1/2・_attack のコマは生成しない）。
+    # 将来 HQ 画像で作り込みコマを足せば _resolve が自動で使う（任意の上乗せ）。
     for name, P in PALETTES.items():
-        for d in DIRS:
-            for pose in POSES:
-                _save(draw_humanoid(P, d, pose), f"{name}_{d}{POSE_SUFFIX[pose]}")
-        _save(draw_humanoid(P, "down", "idle"), name)  # 後方互換＆アイコン用
-    # スライム（無方向・squashで弾む）
-    _save(make_slime(0), "slime")
-    _save(make_slime(1), "slime_walk1")
-    _save(make_slime(2), "slime_walk2")
-    # 死体
+        for d in DIRS:                       # down / up / left
+            _save(draw_humanoid(P, d, "idle"), f"{name}_{d}")
+        # right は left の水平反転（簡易プレースホルダなので鏡像で十分）
+        right = pygame.transform.flip(draw_humanoid(P, "left", "idle"), True, False)
+        _save(right, f"{name}_right")
+        _save(draw_humanoid(P, "down", "idle"), name)  # 後方互換＆アイコン用（下向き静止）
+    _save(make_slime(0), "slime")            # スライムは無方向（procedural で弾ませる）
     _save(make_corpse(), "corpse")
-    print("regenerated directional character sprites into", ASSETS_DIR)
+    print("regenerated base directional placeholders (motion is procedural in graphics.py)")
 
 
 if __name__ == "__main__":
