@@ -156,6 +156,18 @@ slime_shard = Entity(
     item_category=ItemCategory.MATERIAL,
 )
 
+# ゴブリンの爪：ゴブリン撃破時のドロップ素材
+goblin_claw = Entity(
+    sprite="material",
+    name="ゴブリンの爪",
+    blocks_movement=False,
+    item_category=ItemCategory.MATERIAL,
+)
+
+# 敵の撃破ドロップ（combat._die が target.loot を床に落とす。ボスと同じ仕組み）
+goblin.loot = goblin_claw
+slime.loot = slime_shard
+
 # --- 食料・食材（消費アイテム。満腹度を回復し、料理の材料にもなる）---
 nuts = Entity(
     sprite="food_nuts", name="木の実", blocks_movement=False,
