@@ -27,8 +27,8 @@ player = Entity(
     sprite="player",
     name="プレイヤー",
     blocks_movement=True,
-    fighter=Fighter(hp=30, defense=2, power=5, max_stamina=100, max_satiety=100),
-    level=Level(level_up_base=50, level_up_factor=100),
+    fighter=Fighter(hp=40, defense=3, power=6, max_stamina=100, max_satiety=100),
+    level=Level(level_up_base=50, level_up_factor=75),
     inventory=Inventory(capacity=36),
     equipment=Equipment(),
     skills=Skills(),
@@ -42,8 +42,8 @@ goblin = Entity(
     name="ゴブリン",
     blocks_movement=True,
     ai_cls=RLEnemy,
-    fighter=Fighter(hp=12, defense=0, power=5),
-    level=Level(xp_given=35),
+    fighter=Fighter(hp=10, defense=0, power=4),
+    level=Level(xp_given=45),
 )
 
 # スライムはルールベースのまま（RLゴブリンとの行動比較用）
@@ -52,8 +52,8 @@ slime = Entity(
     name="スライム",
     blocks_movement=True,
     ai_cls=HostileEnemy,
-    fighter=Fighter(hp=18, defense=1, power=6),
-    level=Level(xp_given=50),
+    fighter=Fighter(hp=15, defense=1, power=5),
+    level=Level(xp_given=60),
 )
 
 # ボス：3×3マスを占有する大型の敵。ボスフロアの主。
@@ -62,7 +62,7 @@ boss = Entity(
     name="ゴブリンロード",
     blocks_movement=True,
     ai_cls=BossAI,
-    fighter=Fighter(hp=120, defense=3, power=12),
+    fighter=Fighter(hp=90, defense=3, power=9),
     level=Level(xp_given=300),
     size=3,
 )

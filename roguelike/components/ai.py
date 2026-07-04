@@ -209,8 +209,8 @@ class BossAI(BaseAI):
     プレイヤーがボスの9マスのどれかに隣接（外周1マス）したら攻撃する。
     """
 
-    SPECIAL_CHANCE = 0.45  # 特殊行動を試みる確率
-    MAX_SUMMONS = 4        # 召喚で出せる取り巻きの上限
+    SPECIAL_CHANCE = 0.35  # 特殊行動を試みる確率
+    MAX_SUMMONS = 2        # 召喚で出せる取り巻きの上限
 
     def __init__(self, entity: "Entity"):
         super().__init__(entity)

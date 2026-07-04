@@ -7,7 +7,7 @@ if TYPE_CHECKING:
 
 # レベルアップ時のステータス上昇量（バランス調整はここ）
 HP_PER_LEVEL = 20
-POWER_PER_LEVEL = 1
+POWER_PER_LEVEL = 2
 
 
 class Level:

@@ -43,7 +43,7 @@ FOOD_NUTRITION: Dict[str, Dict[str, int]] = {
 
 # 蓄積ストアの範囲としきい値
 MAX = 100.0
-START = 55.0
+START = 60.0
 LOW = 20.0       # これ未満で欠乏症状を発症
 RECOVER = 32.0   # ここまで戻ると症状解消（ヒステリシス）
 GOOD = 50.0      # 全栄養がこれ以上で「好調」バフ
@@ -51,7 +51,7 @@ EAT_SCALE = 0.5  # 食事1回で profile×この倍率を蓄積（満腹度と�
 
 # 1ターンあたりの減衰（マクロは速く、微量栄養は遅い）
 DECAY: Dict[str, float] = {
-    "carb": 0.55, "fat": 0.40, "protein": 0.30,
+    "carb": 0.42, "fat": 0.33, "protein": 0.25,
     "vitA": 0.18, "vitB": 0.22, "vitC": 0.22, "iron": 0.15, "calcium": 0.15,
 }
 

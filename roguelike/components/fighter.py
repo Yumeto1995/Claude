@@ -9,7 +9,10 @@ if TYPE_CHECKING:
 DEFAULT_ATTACK_STAMINA_COST = 30  # 武器未装備（素手）時の攻撃消費スタミナ
 STAMINA_REGEN = 12                # 攻撃以外のターンで回復するスタミナ
 SATIETY_DRAIN = 1                 # 満腹度が1回に減る量
-SATIETY_DRAIN_INTERVAL = 3        # このターン数ごとに1回だけ減る（大きいほど空腹になりにくい）
+# このターン数ごとに1回だけ減る（大きいほど空腹になりにくい）。
+# 5 = 0.2/ターン。1階の踏破が概ね200〜250ターン（探索・戦闘込み）なので、満腹度100の
+# うち約40〜50%＝「1階でおよそ半分」消費する目安。もっと持たせたいなら数値を大きくする。
+SATIETY_DRAIN_INTERVAL = 5
 HUNGER_STAMINA_MULT = 1.5         # 空腹時の攻撃消費スタミナ倍率
 HUNGER_DAMAGE_MULT = 1.5          # 空腹時に受けるダメージ倍率
 

@@ -1084,7 +1084,10 @@ class Renderer:
             cost = ""
             if tool["act"] == "build":
                 b = camp_map.BUILDABLE[tool["kind"]]
-                cost = f"(要:{b[4]})" if b[4] else f"({b[1]})"
+                if b[4]:
+                    cost = f"(要:{b[4]})"
+                elif b[1] > 0:
+                    cost = f"({b[1]})"        # 建設費0（無料）はコスト表示しない
             self._draw_chip(f"{tool['name']}{cost}  Enter使用 / b・1-7切替 / ESC終了",
                             cx, self.play_h - 36, (255, 205, 90))
         elif engine.camp_menu is None:

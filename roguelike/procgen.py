@@ -69,7 +69,7 @@ def _scale_monster(monster: Entity, floor: int) -> None:
         return
     fi = monster.fighter
     if fi is not None:
-        fi.base_power += (f + 1) // 2   # 深いほど与ダメが伸びる
+        fi.base_power += (f + 1) // 3   # 深いほど与ダメが伸びる（易しめ：伸びを緩やかに）
         fi.base_defense += f // 4
         fi.max_hp += f * 2              # HPは控えめに伸ばす（殴り応えを残す）
         fi._hp = fi.max_hp

@@ -18,6 +18,9 @@ FRESH = 0.85      # これ以上は「新鮮」
 SPOILING = 0.35   # これ以下で「傷み」
 ROTTEN = 0.0      # これ以下で「腐敗」
 
+# 食料の劣化速度：このターン数ごとに鮮度を1減らす（大きいほど食料が長持ち）
+SPOIL_INTERVAL = 2
+
 
 def is_perishable(item) -> bool:
     return getattr(item, "shelf_life", None) is not None
@@ -49,10 +52,14 @@ def stage(item):
 
 
 def tick(player) -> None:
-    """持ち物の食料の鮮度を1ターン分減らす（倉庫の食料は対象外）。"""
+    """持ち物の食料の鮮度を減らす（SPOIL_INTERVAL ターンに1回／倉庫の食料は対象外）。"""
     inv = getattr(player, "inventory", None)
     if inv is None:
         return
+    player._spoil_tick = getattr(player, "_spoil_tick", 0) + 1
+    if player._spoil_tick < SPOIL_INTERVAL:
+        return
+    player._spoil_tick = 0
     for it in inv.items:
         if is_perishable(it) and it.freshness is not None:
             it.freshness = max(0, it.freshness - 1)

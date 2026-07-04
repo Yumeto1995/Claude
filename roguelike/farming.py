@@ -17,9 +17,9 @@ if TYPE_CHECKING:
 
 # 種名 → (育つ食材テンプレート, 収穫までに歩く歩数)
 SEEDS = {
-    "木の実の種": (ef.nuts, 60),
-    "薬草の種": (ef.herb, 60),
-    "キノコの種": (ef.mushroom, 90),
+    "木の実の種": (ef.nuts, 50),
+    "薬草の種": (ef.herb, 50),
+    "キノコの種": (ef.mushroom, 70),
 }
 
 

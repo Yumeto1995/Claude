@@ -82,7 +82,7 @@ class Engine:
         """指定階のダンジョンを生成して返す。BOSS_INTERVAL の倍数はボスフロア。"""
         if floor % self.BOSS_INTERVAL == 0:
             return generate_boss_floor(self.width, self.height, self.player, floor)
-        max_monsters = min(2 + (floor - 1) // 2, 6)  # 深いほど敵が増える
+        max_monsters = min(2 + (floor - 1) // 3, 5)  # 深いほど敵が増える（易しめ：上限5・増加緩やか）
         dungeon = None
         for _ in range(20):
             dungeon = generate_dungeon(
@@ -190,6 +190,10 @@ class Engine:
         # 料理をすぐ試せるよう食材も少し
         self.player.inventory.items.append(entity_factories.meat.spawn(0, 0))
         self.player.inventory.items.append(entity_factories.herb.spawn(0, 0))
+        self.player.inventory.items.append(entity_factories.preserved_food.spawn(0, 0))  # 炭水化物源＆保存食
+        # 序盤の生存を助ける回復薬（難易度緩和）
+        for _ in range(3):
+            self.player.inventory.items.append(entity_factories.healing_potion.spawn(0, 0))
 
     def enter_village(self) -> None:
         """村（開始地点）へ。NPCと話し、入口からダンジョンへ向かう。"""
@@ -571,11 +575,12 @@ class Engine:
             self.camp_objects[pos] = {"kind": kind, "content": None}
             self.message_log.add_message(f"{label}を設置した。", colors.ITEM)
             return
-        if not self.player.level.spend_xp(cost, self.player.fighter):   # 経験値で建設
+        if cost > 0 and not self.player.level.spend_xp(cost, self.player.fighter):  # 経験値で建設（0なら無料）
             self.message_log.add_message("お金（経験値）が足りない。", colors.NO_EFFECT)
             return
         self.camp_objects[pos] = {"kind": kind, "content": None}
-        self.message_log.add_message(f"{label}を建てた（-{cost}）。", colors.ITEM)
+        suffix = f"（-{cost}）" if cost > 0 else ""
+        self.message_log.add_message(f"{label}を建てた{suffix}。", colors.ITEM)
 
     def camp_remove(self) -> None:
         """足元の農場設備を撤去する。設置物本体（経験値/アイテム）と、牧柵・いけすの
@@ -603,7 +608,7 @@ class Engine:
             if len(inv.items) < inv.capacity:
                 inv.items.append(entity_factories.sprinkler.spawn(0, 0))
                 recovered.append(label)
-        else:
+        elif cost > 0:                       # 経験値建設は同額を戻す（無料建設は戻しなし）
             self.player.level.add_xp(cost)
             recovered.append(f"経験値+{cost}")
         note = f"（{'・'.join(recovered)}を回収）" if recovered else ""
