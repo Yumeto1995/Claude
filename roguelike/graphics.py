@@ -320,6 +320,7 @@ class Renderer:
         self._wall_cache = {}            # (theme, mask, dark) → Surface
         self._floor_cache = {}           # (key, smask, dark) → Surface
         self._floor_keys_cache = {}      # theme → 床バリアントキーのタプル
+        self._tree_cache = {}            # 草キー → 草に木を重ねた合成 Surface
 
     CONTROLS = [
         "移動：矢印 / WASD / vi / テンキー（斜め・2方向同時可）",
@@ -724,6 +725,18 @@ class Renderer:
         key = self.GRASS_VARIANTS[h % len(self.GRASS_VARIANTS)]
         return self.sprites.get(key, self.sprites["grass"])
 
+    def _tree_for(self, tx: int, ty: int) -> pygame.Surface:
+        """木タイル。透過の木をその座標の草バリアントに重ねて返す（草キーでキャッシュ）。
+        下地の草を敷かないと、透過部分に背景の黒が透ける（階段と同じ扱い）。"""
+        h = ((tx * 73856093) ^ (ty * 19349663)) & 0x7FFFFFFF
+        gkey = self.GRASS_VARIANTS[h % len(self.GRASS_VARIANTS)]
+        surf = self._tree_cache.get(gkey)
+        if surf is None:
+            surf = self.sprites.get(gkey, self.sprites["grass"]).copy()
+            surf.blit(self.sprites["tree"], (0, 0))
+            self._tree_cache[gkey] = surf
+        return surf
+
     def _draw_terrain(self, gm, cam_x: float, cam_y: float, surf_of) -> None:
         """ピクセルカメラに合わせて地形タイルを敷き詰める。
 
@@ -854,7 +867,7 @@ class Renderer:
             if sid == tile_types.SPRITE_WALL:
                 return self.sprites["wood_wall"]
             if sid == tile_types.SPRITE_TREE:
-                return self.sprites["tree"]
+                return self._tree_for(tx, ty)
             if sid == tile_types.SPRITE_DOOR:
                 return self.sprites["door"]
             if sid == tile_types.SPRITE_DOWNSTAIRS:
@@ -1047,7 +1060,7 @@ class Renderer:
 
         def terrain(tx, ty):
             if gm.tiles["sprite"][tx, ty] == tile_types.SPRITE_WALL:
-                return self.sprites.get("tree", self.sprites["wall"])   # 外周は木立
+                return self._tree_for(tx, ty)                          # 外周は木立
             return self._grass_for(tx, ty)                              # 内側は草原
         self._draw_terrain(gm, cam_x, cam_y, terrain)
 
