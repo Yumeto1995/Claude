@@ -19,6 +19,10 @@ STATIONS = {
     (7, 3): "alchemy",
     (9, 3): "health",
     (11, 3): "skill",
+    (13, 3): "shipping",
+    (15, 3): "upgrade",
+    (17, 3): "collection",
+    (19, 3): "altar",
     (24, 28): "exit",
 }
 
@@ -35,6 +39,10 @@ STATION_LABELS = {
     "alchemy": "アイテム錬金",
     "health": "体調を調べる",
     "skill": "魔法陣（スキル振り分け）",
+    "shipping": "出荷箱（産物を売る）",
+    "upgrade": "設備のアップグレード",
+    "collection": "図鑑（コレクション）",
+    "altar": "符呪の祭壇（武器・防具を強化）",
     "exit": "ダンジョンに戻る",
 }
 

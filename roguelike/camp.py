@@ -13,6 +13,8 @@ from typing import TYPE_CHECKING, Any, Dict, List
 import colors
 import cooking
 import crafting
+import economy
+import enchant
 import farming
 import fishery
 import nutrition
@@ -32,6 +34,11 @@ TITLES = {
     "farm_plant": "畑：種を植える",
     "pen_place": "牧柵：動物を入れる",
     "tank_place": "いけす：釣り／養殖",
+    "shipping": "出荷箱：産物を売る",
+    "upgrade": "設備のアップグレード",
+    "collection": "図鑑（コレクション）",
+    "enchant": "符呪：強化する装備を選ぶ",
+    "enchant_ofuda": "符呪：使うお札を選ぶ",
 }
 
 
@@ -120,6 +127,66 @@ def options(engine: "Engine") -> List[Dict[str, Any]]:
         opts.append(_BACK)
         return opts
 
+    if menu == "shipping":
+        equip = engine.player.equipment
+        opts = []
+        for it in list(items):
+            if economy.is_sellable(it) and not equip.item_is_equipped(it):
+                opts.append({"text": f"出荷: {it.name}{economy.quality_suffix(it)}（{economy.sell_value(it)}）",
+                             "enabled": True, "kind": "ship", "data": it})
+        space = len(items) < engine.player.inventory.capacity
+        for it in list(engine.shipping_bin):
+            opts.append({"text": f"戻す: {it.name}{economy.quality_suffix(it)}",
+                         "enabled": space, "kind": "unship", "data": it})
+        opts.append(_BACK)
+        return opts
+
+    if menu == "upgrade":
+        wealth = engine.player.level.wealth()
+        opts = []
+        for fac, (flabel, descs, costs) in economy.UPGRADES.items():
+            lv = engine.upgrades.get(fac, 0)
+            if lv >= economy.MAX_UPGRADE:
+                opts.append({"text": f"{flabel}：最大（{descs[-1]}）", "enabled": False, "kind": "noop"})
+            else:
+                cost = costs[lv]
+                opts.append({"text": f"{flabel}：{descs[lv]}（{cost}）",
+                             "enabled": wealth >= cost, "kind": "upgrade_do", "data": fac})
+        opts.append(_BACK)
+        return opts
+
+    if menu == "collection":
+        opts = []
+        for cat, names in economy.COLLECTIBLES.items():
+            got = sum(1 for n in names if n in engine.collected)
+            opts.append({"text": f"― {cat}（{got}/{len(names)}）―", "enabled": False, "kind": "noop"})
+            for n in names:
+                mark = "✓" if n in engine.collected else "・"
+                opts.append({"text": f"  {mark} {n}", "enabled": False, "kind": "noop"})
+        opts.append(_BACK)
+        return opts
+
+    if menu == "enchant":
+        opts = [{"text": f"{it.name}（{enchant.stat_text(it)}）を符呪",
+                 "enabled": True, "kind": "enchant_pick", "data": it}
+                for it in enchant.enchantable_items(items)]
+        opts.append(_BACK)
+        return opts
+
+    if menu == "enchant_ofuda":
+        target = engine.enchant_target
+        opts = []
+        if target is not None:
+            for name in enchant.compatible_ofuda(items, target):
+                ok, reason = enchant.can_apply(target, name)
+                cnt = sum(1 for it in items if it.name == name)
+                curlv = enchant.level_of(target, enchant.ofuda_id(name))
+                extra = f"（{reason}）" if (not ok and reason) else (f"（現Lv{curlv}）" if curlv else "")
+                opts.append({"text": f"『{name}』{enchant.ofuda_desc(name)}{extra} ×{cnt}",
+                             "enabled": ok, "kind": "enchant_do", "data": name})
+        opts.append(_BACK)
+        return opts
+
     return [_BACK]
 
 
@@ -147,6 +214,21 @@ def info(engine: "Engine") -> List[str]:
         return ["牧柵に動物を入れる。歩くと卵やミルクを繰り返し収穫できる。"]
     if menu == "tank_place":
         return ["いけすで釣る、または魚を入れて養殖する。フグは要調理。"]
+    if menu == "shipping":
+        total = sum(economy.sell_value(it) for it in engine.shipping_bin)
+        return [f"出荷箱: {len(engine.shipping_bin)}品 / 売値 {total}（テントを出ると売れる）"]
+    if menu == "upgrade":
+        return [f"所持金（経験値）: {engine.player.level.wealth()}　※農産物を出荷して稼ごう"]
+    if menu == "collection":
+        got = sum(1 for n in economy.COLLECT_ALL if n in engine.collected)
+        return [f"収集 {got}/{len(economy.COLLECT_ALL)}（全種そろえると報酬）"]
+    if menu == "enchant":
+        return ["武器・防具にお札を符呪して恒久強化する。お札は道具屋で買える。"]
+    if menu == "enchant_ofuda":
+        t = engine.enchant_target
+        if t is not None:
+            return [f"{enchant.base_name(t)}：{enchant.stat_text(t)}"]
+        return ["先に装備を選んでください。"]
     return []
 
 
@@ -209,6 +291,32 @@ def select(engine: "Engine") -> None:
         if obj is not None:
             fishery.place(engine, obj, cur["data"])
         engine.camp_menu = None
+    elif kind == "ship":
+        item = cur["data"]
+        if item in inv.items:
+            inv.items.remove(item)
+            engine.shipping_bin.append(item)
+    elif kind == "unship":
+        item = cur["data"]
+        if item in engine.shipping_bin and len(inv.items) < inv.capacity:
+            engine.shipping_bin.remove(item)
+            inv.items.append(item)
+    elif kind == "upgrade_do":
+        fac = cur["data"]
+        flabel, descs, costs = economy.UPGRADES[fac]
+        lv = engine.upgrades.get(fac, 0)
+        if lv < economy.MAX_UPGRADE and engine.player.level.spend_xp(costs[lv], engine.player.fighter):
+            engine.upgrades[fac] = lv + 1
+            if fac == "storage":
+                engine.apply_storage_upgrade()
+            engine.message_log.add_message(f"{flabel}を強化した（{descs[lv]}）。", colors.LEVEL_UP)
+    elif kind == "enchant_pick":
+        engine.enchant_target = cur["data"]
+        engine.camp_menu, engine.camp_cursor = "enchant_ofuda", 0
+    elif kind == "enchant_do":
+        if engine.enchant_target is not None:
+            enchant.apply(engine, engine.enchant_target, cur["data"])
+        engine.camp_cursor = 0
 
 
 def back(engine: "Engine") -> None:
@@ -217,6 +325,8 @@ def back(engine: "Engine") -> None:
     elif engine.camp_menu == "cook":
         engine.cook_pot = []
         engine.camp_menu = None
-    else:  # alchemy / storage / health / farm_plant / pen_place / tank_place
+    elif engine.camp_menu == "enchant_ofuda":
+        engine.camp_menu = "enchant"
+    else:  # alchemy / storage / health / farm_plant / pen_place / tank_place / …
         engine.camp_menu = None
     engine.camp_cursor = 0

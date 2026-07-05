@@ -47,6 +47,11 @@ class Engine:
         self.camp_tool = None        # 建設モードの選択中の道具インデックス（None=非建設）
         self.discovered_dishes = set()  # 作ったことのある料理名
         self.storage = []            # 拠点の倉庫（持ち越し収納）
+        self.shipping_bin = []       # 出荷箱：次にダンジョンへ潜るとき売却してXPに
+        self.collected = set()       # 図鑑：育て/釣り/料理で手に入れた産物名
+        self.collection_rewarded = False  # 図鑑コンプ報酬を渡したか
+        self.upgrades = {"storage": 0, "cooking": 0}  # 設備アップグレード段階
+        self.enchant_target = None   # 符呪の祭壇で選択中の装備
         self.unlocked_zones = set()  # 開放済み区画（"ranch"/"fishery"）
         self.dungeon_map = None      # 拠点滞在中、ダンジョンマップを退避
         self.dungeon_pos = (0, 0)
@@ -71,6 +76,7 @@ class Engine:
         self.building_return = (0, 0)  # 村に戻るときの位置
         self.shop_kind = None        # 開いている店の種別（None=閉じている）
         self.shop_cursor = 0
+        self.shop_mode = "buy"       # 店のモード（buy=買う / sell=売る）
         # 潜入中のダンジョン各階を保持（上下移動で同じ階に戻れる）。
         # 村に戻ると破棄され、次の潜入では新しいダンジョンになる。
         self.floors = {}
@@ -316,6 +322,11 @@ class Engine:
     def open_shop(self, kind: str) -> None:
         self.shop_kind = kind
         self.shop_cursor = 0
+        self.shop_mode = "buy"
+
+    def shop_toggle_mode(self) -> None:
+        self.shop_mode = "sell" if self.shop_mode == "buy" else "buy"
+        self.shop_cursor = 0
 
     def shop_move_cursor(self, delta: int) -> None:
         n = len(shop.options(self, self.shop_kind))
@@ -328,7 +339,10 @@ class Engine:
             return
         cur = opts[min(self.shop_cursor, len(opts) - 1)]
         if cur.get("enabled", True):
-            shop.buy(self, self.shop_kind, cur["index"])
+            if self.shop_mode == "sell":
+                shop.sell(self, cur["index"])
+            else:
+                shop.buy(self, self.shop_kind, cur["index"])
 
     def shop_close(self) -> None:
         self.shop_kind = None
@@ -393,12 +407,44 @@ class Engine:
         self.cook_pot = []
 
     def leave_camp(self) -> None:
-        """ダンジョンに戻る。"""
+        """ダンジョンに戻る。出荷箱の中身はここで売却して経験値(お金)になる。"""
+        self._ship_out()
         self.game_map = self.dungeon_map
         self.player.x, self.player.y = self.dungeon_pos
         self.in_camp = False
         self.camp_menu = None
         self.message_log.add_message("テントをたたんでダンジョンに戻った。", colors.WELCOME)
+
+    def _ship_out(self) -> None:
+        """出荷箱の中身を売却して経験値(お金)にする（Stardew の出荷箱に相当）。"""
+        import economy
+        if not self.shipping_bin:
+            return
+        total = sum(economy.sell_value(it) for it in self.shipping_bin)
+        n = len(self.shipping_bin)
+        self.shipping_bin = []
+        self.player.level.add_xp(total)
+        self.message_log.add_message(
+            f"出荷箱の {n} 品を売った。 +{total} の経験値（お金）を得た。", colors.LEVEL_UP)
+
+    def record_collection(self, name: str) -> None:
+        """図鑑に産物を記録。全種そろえたら一度だけ報酬。"""
+        import economy
+        if name not in economy.COLLECT_ALL or name in self.collected:
+            return
+        self.collected.add(name)
+        if (not self.collection_rewarded
+                and all(n in self.collected for n in economy.COLLECT_ALL)):
+            self.collection_rewarded = True
+            self.player.level.add_xp(economy.COLLECTION_REWARD)
+            self.message_log.add_message(
+                f"図鑑をコンプリート！ 報酬 +{economy.COLLECTION_REWARD} の経験値！",
+                colors.LEVEL_UP)
+
+    def apply_storage_upgrade(self) -> None:
+        """収納アップグレード段階に応じて持ち物枠を更新する。"""
+        import economy
+        self.player.inventory.capacity = 36 + self.upgrades["storage"] * economy.STORAGE_PER_LEVEL
 
     def camp_interact(self) -> None:
         """足元の設備を使う（Enter）。住居設備か、配置した農場設備（畑/牧柵/いけす）。"""
@@ -413,7 +459,10 @@ class Engine:
         if kind == "cooking":
             self.camp_menu, self.camp_cursor, self.cook_pot = "cook", 0, []
             return
-        if kind in ("alchemy", "storage", "health"):
+        if kind == "altar":
+            self.camp_menu, self.camp_cursor, self.enchant_target = "enchant", 0, None
+            return
+        if kind in ("alchemy", "storage", "health", "shipping", "upgrade", "collection"):
             self.camp_menu, self.camp_cursor = kind, 0
             return
         obj = self.camp_objects.get(pos)
@@ -471,8 +520,10 @@ class Engine:
                 continue
             if c["steps_left"] > 0:
                 c["steps_left"] -= 1
-                if obj["kind"] == "farm" and pos in sprinkled and c["steps_left"] > 0:
-                    c["steps_left"] -= 1   # スプリンクラーで自動水やり（成長倍速）
+                if obj["kind"] == "farm" and pos in sprinkled:
+                    c["tended"] = True     # スプリンクラー管理＝手入れ済み（収穫品質UP）
+                    if c["steps_left"] > 0:
+                        c["steps_left"] -= 1   # 自動水やりで成長倍速
             if c.get("boost_cd", 0) > 0:
                 c["boost_cd"] -= 1
 
@@ -547,6 +598,7 @@ class Engine:
         boost = camp_map.TEND_BOOST
         c["steps_left"] = max(0, c["steps_left"] - boost)
         c["boost_cd"] = boost
+        c["tended"] = True   # 手入れ済み＝収穫/産出の品質UP
         suffix = f"（{consume}を1消費）" if consume is not None else ""
         self.message_log.add_message(f"{verb}した。{what}が進んだ{suffix}。", colors.ITEM)
 

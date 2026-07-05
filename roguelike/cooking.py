@@ -205,8 +205,10 @@ def cook(engine: "Engine", pot: List[str], method: str) -> None:
                 inv.remove(it)
                 break
 
+    import economy
     sk = getattr(engine.player, "skills", None)
     boost = sk.cooking_mult() if sk is not None else 1.0
+    boost += engine.upgrades.get("cooking", 0) * economy.COOKING_PER_LEVEL  # かまど改良で効果UP
     res = compute_dish(pot, method, boost)
 
     from components.consumable import FoodDishConsumable

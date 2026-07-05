@@ -29,6 +29,7 @@ from actions import (
     ShopBuyAction,
     ShopCloseAction,
     ShopMoveCursorAction,
+    ShopToggleModeAction,
     SkillNavAction,
     SkillUnlockAction,
     ToggleAttackModeAction,
@@ -91,6 +92,8 @@ def dispatch_event(event: pygame.event.Event, engine: "Engine") -> Optional[Acti
                     return ShopMoveCursorAction(1)
                 if key in (pygame.K_RETURN, pygame.K_KP_ENTER):
                     return ShopBuyAction()
+                if key == pygame.K_TAB:
+                    return ShopToggleModeAction()   # 買う/売る 切替
                 if key == pygame.K_ESCAPE:
                     return ShopCloseAction()
                 return None
@@ -110,6 +113,8 @@ def dispatch_event(event: pygame.event.Event, engine: "Engine") -> Optional[Acti
 
         # 拠点（テント内）にいる間は専用の操作
         if engine.in_camp:
+            if engine.inventory_open:
+                return _inventory_keys(key, engine)   # 拠点でも持ち物を開ける
             if engine.camp_menu is not None:
                 return _camp_menu_keys(key, engine)   # 設備メニュー中
             # 建設モード中：Enter=道具を使う / b=切替 / 1-6=道具選択 / ESC=終了
@@ -126,6 +131,8 @@ def dispatch_event(event: pygame.event.Event, engine: "Engine") -> Optional[Acti
             # テント内を歩いている：b=建設モード / Enter=設備 / ESC=ダンジョンへ
             if key == pygame.K_b:
                 return CampBuildAction("cycle")
+            if key == pygame.K_i:
+                return ToggleInventoryAction()   # 拠点でも持ち物を開ける
             if key in (pygame.K_RETURN, pygame.K_KP_ENTER):
                 return CampInteractAction()
             if key == pygame.K_ESCAPE:
@@ -244,8 +251,8 @@ def held_movement_action(engine: "Engine") -> Optional[Action]:
         return None
     non_combat = engine.in_camp or getattr(engine, "in_village", False)
     if engine.in_camp:
-        if engine.camp_menu is not None:
-            return None  # 設備メニュー中は歩けない
+        if engine.camp_menu is not None or engine.inventory_open:
+            return None  # 設備メニュー中・持ち物を開いている間は歩けない
     elif getattr(engine, "in_village", False):
         if (getattr(engine, "dialogue", None) is not None
                 or getattr(engine, "shop_kind", None) is not None):

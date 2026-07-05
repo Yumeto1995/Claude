@@ -39,11 +39,19 @@ def place_obj(engine, obj, name, table, where_label, speed: float = 1.0) -> None
 
 def collect_obj(engine, obj) -> None:
     """産出が完了していれば収穫し、interval にリセット（繰り返し産出）。"""
+    import economy
     c = obj["content"]
     if c is None or c["steps_left"] > 0:
         return
-    engine.player.inventory.items.append(c["product"].spawn(0, 0))
-    engine.message_log.add_message(f"{c['product_name']} を手に入れた。", colors.ITEM)
+    item = c["product"].spawn(0, 0)
+    sk = getattr(engine.player, "skills", None)
+    branch = {"pen": "ranch", "tank": "fishery"}.get(obj["kind"], "ranch")
+    rank = sk.rank(branch) if sk is not None else 0
+    item.quality = economy.roll_quality(rank, tended=c.get("tended", False))
+    engine.player.inventory.items.append(item)
+    engine.record_collection(item.name)
+    engine.message_log.add_message(
+        f"{c['product_name']}{economy.quality_suffix(item)} を手に入れた。", colors.ITEM)
     c["steps_left"] = c["interval"]
 
 

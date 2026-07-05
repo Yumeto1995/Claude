@@ -4,6 +4,7 @@ from typing import TYPE_CHECKING
 
 import colors
 import combat
+import enchant
 import item_category
 from components.fighter import HUNGER_DAMAGE_MULT
 
@@ -266,6 +267,15 @@ class ShopCloseAction(Action):
         engine.shop_close()
 
 
+class ShopToggleModeAction(Action):
+    """店の『買う／売る』モードを切り替える。"""
+
+    consumes_turn = False
+
+    def perform(self, engine: Engine, entity: Entity) -> None:
+        engine.shop_toggle_mode()
+
+
 class ToggleSkillTreeAction(Action):
     """スキルツリー画面を開閉する。"""
 
@@ -376,6 +386,7 @@ class MeleeAction(ActionWithDirection):
             return
 
         damage = entity.fighter.power - target.fighter.defense
+        damage += enchant.weapon_fire_bonus(entity)   # 火炎の符呪：追加ダメージ
         if target.fighter.is_hungry:
             damage = int(damage * HUNGER_DAMAGE_MULT)  # 空腹だと受けるダメージ増
         damage = max(1, damage)  # 命中すれば最低1ダメージ（防御で完全無効化しない）
@@ -395,6 +406,7 @@ class MeleeAction(ActionWithDirection):
         popup_color = (255, 90, 90) if target is engine.player else (255, 240, 140)
         engine.pending_fx.append(("popup", dest_x, dest_y, f"-{damage}", popup_color))
         combat.inflict_damage(engine, target, damage, attacker=entity)
+        enchant.apply_knockback(engine, entity, target, self.dx, self.dy)  # 撃退の符呪
 
 
 class BumpAction(ActionWithDirection):

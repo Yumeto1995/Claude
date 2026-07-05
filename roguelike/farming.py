@@ -54,11 +54,18 @@ def plant_obj(engine: "Engine", obj, seed_name: str) -> None:
 
 def harvest_obj(engine: "Engine", obj) -> None:
     """育った作物を収穫し、畑を空にする。"""
+    import economy
     c = obj["content"]
     if c is None or c["steps_left"] > 0:
         return
-    engine.player.inventory.items.append(c["template"].spawn(0, 0))
-    engine.message_log.add_message(f"{c['name']} を収穫した。", colors.ITEM)
+    item = c["template"].spawn(0, 0)
+    sk = getattr(engine.player, "skills", None)
+    rank = sk.rank("farming") if sk is not None else 0
+    item.quality = economy.roll_quality(rank, tended=c.get("tended", False))
+    engine.player.inventory.items.append(item)
+    engine.record_collection(item.name)
+    engine.message_log.add_message(
+        f"{c['name']}{economy.quality_suffix(item)} を収穫した。", colors.ITEM)
     obj["content"] = None
 
 

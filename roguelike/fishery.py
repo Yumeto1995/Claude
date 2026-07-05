@@ -48,8 +48,13 @@ def fish(engine):
     if template is None:
         engine.message_log.add_message("ゴミが釣れた…", colors.NO_EFFECT)
         return
-    inv.append(template.spawn(0, 0))
-    engine.message_log.add_message(f"{name} を釣り上げた！", colors.LEVEL_UP)
+    import economy
+    caught = template.spawn(0, 0)
+    caught.quality = economy.roll_quality(rank)
+    inv.append(caught)
+    engine.record_collection(name)
+    engine.message_log.add_message(
+        f"{name}{economy.quality_suffix(caught)} を釣り上げた！", colors.LEVEL_UP)
 
 
 # --- 養殖いけす ---

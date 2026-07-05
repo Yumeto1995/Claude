@@ -74,12 +74,14 @@ class FoodConsumable(Consumable):
         if f.satiety >= f.max_satiety:
             engine.message_log.add_message("満腹で食べられない。", colors.NO_EFFECT)
             return False
+        import economy
         factor = spoilage.freshness_factor(self.entity)   # 傷み/腐敗で回復減
-        restored = f.restore_satiety(int(self.amount * factor))
+        qmult = economy.QUALITY_MULT[economy.quality_of(self.entity)]  # 品質（星）で効果UP
+        restored = f.restore_satiety(int(self.amount * factor * qmult))
         nut = getattr(consumer, "nutrition", None)
         if nut is not None:                      # 隠し栄養：鮮度に応じて蓄積
             nut.eat(nutrition.profile_for(self.entity.name),
-                    scale=nutrition.EAT_SCALE * factor)
+                    scale=nutrition.EAT_SCALE * factor * qmult)
         adj = {"傷み": "傷んだ", "腐敗": "腐った"}.get(spoilage.stage(self.entity)[0], "")
         engine.message_log.add_message(
             f"{adj}{self.entity.name} を食べた。満腹度が {restored} 回復した。", colors.HEAL

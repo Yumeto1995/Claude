@@ -170,6 +170,10 @@ PLACEHOLDER_COLORS: Dict[str, tuple] = {
     "st_exit": (120, 220, 255),
     "st_health": (225, 120, 120),
     "st_skill": (198, 130, 250),
+    "st_shipping": (150, 180, 90),
+    "st_upgrade": (200, 170, 90),
+    "st_collection": (120, 190, 180),
+    "st_altar": (210, 90, 150),
     "farm_empty": (110, 80, 55),
     "farm_grow": (120, 170, 90),
     "farm_ready": (230, 220, 90),
@@ -759,6 +763,8 @@ class Renderer:
             self._render_panel(engine)
             if engine.camp_menu is not None:
                 self._render_camp_menu(engine)
+            if engine.inventory_open:
+                self._render_inventory(engine)   # 拠点でも持ち物を開ける
             if getattr(engine, "skill_open", False):
                 self._render_skill_tree(engine)
             pygame.display.flip()
@@ -1035,8 +1041,9 @@ class Renderer:
         cam_x, cam_y = self._camera_px(engine)
 
         def terrain(tx, ty):
-            key = "wall" if gm.tiles["sprite"][tx, ty] == tile_types.SPRITE_WALL else "floor"
-            return self.sprites[key]
+            if gm.tiles["sprite"][tx, ty] == tile_types.SPRITE_WALL:
+                return self.sprites.get("tree", self.sprites["wall"])   # 外周は木立
+            return self._grass_for(tx, ty)                              # 内側は草原
         self._draw_terrain(gm, cam_x, cam_y, terrain)
 
         # 住居の固定設備

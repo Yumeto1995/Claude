@@ -16,7 +16,7 @@ import random
 from typing import Dict, List, Tuple
 
 POINTS_PER_LEVEL = 1   # レベルアップ1回で得るスキルポイント
-TIERS = 3              # 各系統の段数
+TIERS = 4              # 各系統の段数（心得→鍛錬→極意→奥義）
 MEDICINE_XP_COST = 1000  # 医術「自己診断」の習得に必要な経験値（お金）
 
 # 系統キー → (表示名, 各段の効果説明)
@@ -38,18 +38,18 @@ BRANCH_LABEL = dict(BRANCHES)
 # 段ごとの効果説明（rank1,2,3）
 # 効果説明（短め。系統名は列見出しにあるので数値中心）
 TIER_DESC = {
-    "attack": ["攻+1", "攻+2", "攻+3"],
-    "defense": ["防+1", "防+2", "防+3"],
-    "luck": ["会心6%", "会心12%", "会心20%"],
-    "cooking": ["効果+15%", "効果+30%", "効果+50%"],
-    "farming": ["成長-15%", "成長-30%", "成長-45%"],
-    "fishery": ["釣果+", "釣果++", "入れ食い"],
-    "ranch": ["産出-15%", "産出-30%", "産出-45%"],
-    "alchemy": ["おまけ20%", "おまけ40%", "おまけ60%"],
-    "magic": ["威力+20%", "威力+40%", "威力+70%"],
-    "medicine": ["自己診断", "—", "—"],
+    "attack": ["攻+1", "攻+2", "攻+3", "攻+4・吸血"],
+    "defense": ["防+1", "防+2", "防+3", "防+4・軽減"],
+    "luck": ["会心6%", "会心12%", "会心20%", "会心30%・回避"],
+    "cooking": ["効果+15%", "効果+30%", "効果+50%", "効果+80%"],
+    "farming": ["成長-15%", "成長-30%", "成長-45%", "成長-60%"],
+    "fishery": ["釣果+", "釣果++", "入れ食い", "入れ食い++"],
+    "ranch": ["産出-15%", "産出-30%", "産出-45%", "産出-60%"],
+    "alchemy": ["おまけ20%", "おまけ40%", "おまけ60%", "おまけ80%"],
+    "magic": ["威力+20%", "威力+40%", "威力+70%", "威力+100%"],
+    "medicine": ["自己診断", "—", "—", "—"],
 }
-TIER_NAME = ["心得", "鍛錬", "極意"]
+TIER_NAME = ["心得", "鍛錬", "極意", "奥義"]
 
 
 def node_id(branch: str, tier: int) -> str:
@@ -64,12 +64,16 @@ def node_desc(branch: str, tier: int) -> str:
     return TIER_DESC[branch][tier]
 
 
-# rank(1..3) → 倍率/値（index0 は未解放）
-_CRIT = [0.0, 0.06, 0.12, 0.20]
-_COOK = [1.0, 1.15, 1.30, 1.50]
-_MAGIC = [1.0, 1.20, 1.40, 1.70]
-_GROWTH = [1.0, 0.85, 0.70, 0.55]      # 歩数の倍率（小さいほど速い）
-_ALCHEMY = [0.0, 0.20, 0.40, 0.60]     # おまけ生成の確率
+# rank(1..4) → 倍率/値（index0 は未解放。4段目＝奥義）
+_CRIT = [0.0, 0.06, 0.12, 0.20, 0.30]
+_COOK = [1.0, 1.15, 1.30, 1.50, 1.80]
+_MAGIC = [1.0, 1.20, 1.40, 1.70, 2.00]
+_GROWTH = [1.0, 0.85, 0.70, 0.55, 0.40]   # 歩数の倍率（小さいほど速い）
+_ALCHEMY = [0.0, 0.20, 0.40, 0.60, 0.80]  # おまけ生成の確率
+# 奥義（4段目到達）で解放される新メカニクス
+_DODGE = 0.20       # 運の奥義：被攻撃を確率で完全回避
+_LIFESTEAL = 0.25   # 攻撃の奥義：与ダメージの割合を回復
+_DMG_REDUCE = 0.25  # 防御の奥義：被ダメージの軽減割合
 
 
 class Skills:
@@ -159,6 +163,19 @@ class Skills:
 
     def alchemy_bonus_chance(self) -> float:
         return _ALCHEMY[self.rank("alchemy")]
+
+    # --- 奥義（各系統4段目）で解放される新メカニクス ---
+    def dodge_chance(self) -> float:
+        """運の奥義：被攻撃を確率で完全回避。"""
+        return _DODGE if self.rank("luck") >= 4 else 0.0
+
+    def lifesteal_frac(self) -> float:
+        """攻撃の奥義：与ダメージのこの割合を回復。"""
+        return _LIFESTEAL if self.rank("attack") >= 4 else 0.0
+
+    def damage_reduction(self) -> float:
+        """防御の奥義：被ダメージのこの割合を軽減。"""
+        return _DMG_REDUCE if self.rank("defense") >= 4 else 0.0
 
     def roll(self, prob: float) -> bool:
         return prob > 0 and random.random() < prob

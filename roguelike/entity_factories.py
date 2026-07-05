@@ -258,6 +258,16 @@ feed = Entity(sprite="feed", name="飼料", blocks_movement=False,
 sprinkler = Entity(sprite="sprinkler", name="スプリンクラー", blocks_movement=False,
                    item_category=ItemCategory.MATERIAL)
 
+# --- 符呪のお札（拠点の祭壇で装備にエンチャントを付ける消耗品。武器用/防具用）---
+# Minecraft のエンチャント風：札ごとに符呪が対応し、重ねるとレベルが上がる。
+ofuda_sharp   = Entity(sprite="scroll", name="鋭利の札", blocks_movement=False, item_category=ItemCategory.MATERIAL)
+ofuda_fire    = Entity(sprite="scroll", name="火炎の札", blocks_movement=False, item_category=ItemCategory.MATERIAL)
+ofuda_knock   = Entity(sprite="scroll", name="撃退の札", blocks_movement=False, item_category=ItemCategory.MATERIAL)
+ofuda_loot    = Entity(sprite="scroll", name="略奪の札", blocks_movement=False, item_category=ItemCategory.MATERIAL)
+ofuda_protect = Entity(sprite="scroll", name="防護の札", blocks_movement=False, item_category=ItemCategory.MATERIAL)
+ofuda_thorns  = Entity(sprite="scroll", name="棘の札", blocks_movement=False, item_category=ItemCategory.MATERIAL)
+ofuda_light   = Entity(sprite="scroll", name="軽量の札", blocks_movement=False, item_category=ItemCategory.MATERIAL)
+
 # 料理は固定テンプレートではなく cooking.cook() が動的に生成する。
 
 # --- 大切なもの（捨てられない重要アイテム）---

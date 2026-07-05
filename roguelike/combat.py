@@ -24,7 +24,28 @@ def inflict_damage(
     """target に amount のダメージを与える。死亡時は撃破処理＋（attacker がいれば）経験値。"""
     if target.fighter is None:
         return
+    ts = getattr(target, "skills", None)   # スキルを持つのはプレイヤーのみ
+    # 運の奥義：確率で攻撃を完全回避
+    if ts is not None and ts.dodge_chance() and ts.roll(ts.dodge_chance()):
+        engine.message_log.add_message(f"{target.name} は攻撃をかわした！", colors.NO_EFFECT)
+        engine.pending_fx.append(("popup", target.x, target.y, "MISS", (170, 210, 255)))
+        return
+    # 防御の奥義：被ダメージを軽減
+    if ts is not None and ts.damage_reduction():
+        amount = max(1, int(amount * (1.0 - ts.damage_reduction())))
     target.fighter.hp -= amount
+    # 攻撃の奥義：与ダメージの一部を吸収して回復
+    if attacker is not None and attacker.fighter is not None and amount > 0:
+        a_sk = getattr(attacker, "skills", None)
+        if a_sk is not None and a_sk.lifesteal_frac():
+            heal = max(1, int(amount * a_sk.lifesteal_frac()))
+            attacker.fighter.hp = min(attacker.fighter.max_hp, attacker.fighter.hp + heal)
+    # 棘の符呪：被弾時、近接攻撃者へダメージを反射（防具に棘があると）
+    if attacker is not None and attacker.fighter is not None and attacker.fighter.hp > 0 and amount > 0:
+        import enchant
+        frac = enchant.armor_thorns_frac(target)
+        if frac > 0:
+            inflict_damage(engine, attacker, max(1, int(amount * frac)), attacker=target)
     if target.fighter.hp <= 0:
         _die(engine, target)
         if (
@@ -57,6 +78,8 @@ def _die(engine: "Engine", target: "Entity") -> None:
 def grant_xp(engine: "Engine", attacker: "Entity", amount: int) -> None:
     if amount <= 0 or attacker.level is None or attacker.fighter is None:
         return
+    import enchant
+    amount = int(amount * enchant.looting_mult(attacker))   # 略奪の符呪：撃破XP増
     is_player = attacker is engine.player
     if is_player:
         engine.message_log.add_message(f"{amount} の経験値を得た。", colors.XP)
