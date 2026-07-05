@@ -22,7 +22,7 @@ KEYS: List[str] = list(NUTRIENTS.keys())
 
 # 食材ごとの栄養素（未記載は0）。tox は毒性（料理の食中毒判定用）。
 FOOD_NUTRITION: Dict[str, Dict[str, int]] = {
-    "木の実":   {"carb": 16, "fat": 18, "protein": 4, "vitB": 6, "calcium": 4},
+    "リンゴ":   {"carb": 16, "fat": 18, "protein": 4, "vitB": 6, "calcium": 4},
     "薬草":     {"vitC": 20, "vitA": 16, "calcium": 8, "iron": 4},
     "キノコ":   {"vitB": 14, "protein": 6, "iron": 4, "tox": 5},
     "肉":       {"protein": 28, "fat": 12, "iron": 14, "vitB": 10, "tox": 4},

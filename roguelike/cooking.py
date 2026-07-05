@@ -60,7 +60,7 @@ RECIPES: List[Dict] = [
      "effects": [StatusEffect("ちから+1", turns=24, power_bonus=1)]},
     {"ingredients": {"果実": 2}, "method": None, "name": "フルーツサラダ",
      "bonus_heal": 14, "effects": []},
-    {"ingredients": {"チーズ": 1, "木の実": 1}, "method": None, "name": "チーズ焼き",
+    {"ingredients": {"チーズ": 1, "リンゴ": 1}, "method": None, "name": "チーズ焼き",
      "bonus_satiety": 14,
      "effects": [StatusEffect("まもり+2", turns=30, defense_bonus=2)]},
     {"ingredients": {"蜂蜜": 1, "果実": 1}, "method": None, "name": "蜂蜜がけフルーツ",

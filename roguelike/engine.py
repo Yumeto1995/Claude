@@ -597,7 +597,7 @@ class Engine:
             item = next((it for it in inv if it.name == consume), None)
             if item is None:
                 self.message_log.add_message(
-                    f"{consume}がない（木の実から錬金で作れる）。", colors.NO_EFFECT
+                    f"{consume}がない（リンゴから錬金で作れる）。", colors.NO_EFFECT
                 )
                 return
             inv.remove(item)

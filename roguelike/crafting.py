@@ -29,7 +29,7 @@ ALCHEMY_RECIPES: List[Recipe] = [
     Recipe([("スライムのかけら", 3)], ef.healing_potion, "回復薬"),
     Recipe([("スライムのかけら", 5)], ef.lightning_scroll, "雷の巻物"),
     Recipe([("スライムのかけら", 1)], ef.bait, "エサ（釣り用）"),
-    Recipe([("木の実", 2)], ef.feed, "飼料（畜産用）"),
+    Recipe([("リンゴ", 2)], ef.feed, "飼料（畜産用）"),
     Recipe([("スライムのかけら", 6)], ef.sprinkler, "スプリンクラー"),
 ]
 

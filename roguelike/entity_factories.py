@@ -170,7 +170,7 @@ slime.loot = slime_shard
 
 # --- 食料・食材（消費アイテム。満腹度を回復し、料理の材料にもなる）---
 nuts = Entity(
-    sprite="food_nuts", name="木の実", blocks_movement=False,
+    sprite="food_fruit", name="リンゴ", blocks_movement=False,
     consumable=FoodConsumable(amount=25), shelf_life=400,  # 乾物で日持ち
 )
 preserved_food = Entity(
@@ -219,7 +219,7 @@ poison_mushroom = Entity(
 
 # --- 種（素材。拠点の畑に植えると、階を潜るうちに食材が育つ）---
 nut_seed = Entity(
-    sprite="seed", name="木の実の種", blocks_movement=False,
+    sprite="seed", name="リンゴの種", blocks_movement=False,
     item_category=ItemCategory.MATERIAL,
 )
 herb_seed = Entity(
@@ -251,7 +251,7 @@ cow = Entity(sprite="material", name="ウシ", blocks_movement=False,
              item_category=ItemCategory.MATERIAL)
 bait = Entity(sprite="material", name="エサ", blocks_movement=False,
               item_category=ItemCategory.MATERIAL)
-# 飼料：畜産フォークでの餌やりに消費する（木の実から錬金で作る）
+# 飼料：畜産フォークでの餌やりに消費する（リンゴから錬金で作る）
 feed = Entity(sprite="feed", name="飼料", blocks_movement=False,
               item_category=ItemCategory.MATERIAL)
 # スプリンクラー：購入/クラフトで入手し、建設モードのトンカチで設置（撤去で回収）
