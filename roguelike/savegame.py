@@ -37,6 +37,10 @@ def load_game(path: str = SAVE_PATH):
     }
     # 旧セーブのプレイヤーにスキルツリーが無ければ付与
     pl = getattr(engine, "player", None)
+    # 盾の専用枠を後付け（旧セーブの Equipment には shield 属性が無い）
+    if pl is not None and getattr(pl, "equipment", None) is not None:
+        if not hasattr(pl.equipment, "shield"):
+            pl.equipment.shield = None
     if pl is not None and getattr(pl, "skills", None) is None:
         from skills import Skills
         sk = Skills()

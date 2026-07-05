@@ -1303,8 +1303,8 @@ class Renderer:
         if eq.defense_bonus:
             parts.append(f"防+{eq.defense_bonus}")
         if eq.stamina_cost is not None:
-            # 武器=その攻撃の消費、防具=攻撃時の追加消費（+表記）
-            if eq.equipment_type == EquipmentType.ARMOR:
+            # 武器=その攻撃の消費、防具/盾=攻撃時の追加消費（+表記）
+            if eq.equipment_type in (EquipmentType.ARMOR, EquipmentType.SHIELD):
                 parts.append(f"ST+{eq.stamina_cost}")
             else:
                 parts.append(f"ST{eq.stamina_cost}")

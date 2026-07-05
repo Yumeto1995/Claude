@@ -11,6 +11,7 @@ class EquipmentType(Enum):
     WEAPON = auto()   # 近接武器（weapon 枠）
     ARMOR = auto()    # 防具（armor 枠）
     RANGED = auto()   # 遠距離武器（弓など。ranged 枠。近接 power には加算しない）
+    SHIELD = auto()   # 盾（shield 枠。鎧と別枠なので同時装備できる）
 
 
 class Equippable:

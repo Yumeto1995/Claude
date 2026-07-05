@@ -181,12 +181,12 @@ chain_mail = Entity(
     equippable=Equippable(EquipmentType.ARMOR, defense_bonus=4, stamina_cost=6),
 )
 
-# 木の盾：革と鎖の中間の軽い防具（防具枠は1つなので鎧と択一）
+# 木の盾：盾は専用枠。鎧（革/鎖/板金）と同時に装備して防御を上乗せできる
 wooden_shield = Entity(
     sprite="shield",
     name="木の盾",
     blocks_movement=False,
-    equippable=Equippable(EquipmentType.ARMOR, defense_bonus=2, stamina_cost=3),
+    equippable=Equippable(EquipmentType.SHIELD, defense_bonus=2, stamina_cost=3),
 )
 
 # 板金鎧：最高防御だが非常に重く、攻撃のたびに大きくスタミナを食う
@@ -277,6 +277,14 @@ herb_seed = Entity(
 )
 mushroom_seed = Entity(
     sprite="seed", name="キノコの種", blocks_movement=False,
+    item_category=ItemCategory.MATERIAL,
+)
+potato_seed = Entity(       # 野菜：イモ（収穫で種が採れる）
+    sprite="seed", name="イモの種", blocks_movement=False,
+    item_category=ItemCategory.MATERIAL,
+)
+fruit_seed = Entity(        # 果物：果実（収穫しても株が残り再収穫できる）
+    sprite="seed", name="果実の種", blocks_movement=False,
     item_category=ItemCategory.MATERIAL,
 )
 

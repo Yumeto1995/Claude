@@ -20,15 +20,17 @@ class Equipment:
         weapon: Optional["Entity"] = None,
         armor: Optional["Entity"] = None,
         ranged: Optional["Entity"] = None,
+        shield: Optional["Entity"] = None,
     ):
         self.weapon = weapon  # 装備中の近接武器（Entity）or None
         self.armor = armor    # 装備中の防具（Entity）or None
         self.ranged = ranged  # 装備中の遠距離武器＝弓（Entity）or None
+        self.shield = shield  # 装備中の盾（Entity）or None。鎧と別枠で同時装備できる
 
     @property
     def power_bonus(self) -> int:
         total = 0
-        for item in (self.weapon, self.armor):
+        for item in (self.weapon, self.armor, self.shield):
             if item is not None and item.equippable is not None:
                 total += item.equippable.power_bonus
         return total
@@ -36,13 +38,13 @@ class Equipment:
     @property
     def defense_bonus(self) -> int:
         total = 0
-        for item in (self.weapon, self.armor):
+        for item in (self.weapon, self.armor, self.shield):
             if item is not None and item.equippable is not None:
                 total += item.equippable.defense_bonus
         return total
 
     def item_is_equipped(self, item: "Entity") -> bool:
-        return item is self.weapon or item is self.armor or item is self.ranged
+        return item in (self.weapon, self.armor, self.ranged, self.shield)
 
     def toggle_equip(self, item: "Entity", engine: "Engine") -> None:
         """アイテムを装備/解除する（同じ枠に別物があれば付け替え）。"""
@@ -51,6 +53,8 @@ class Equipment:
             slot = "weapon"
         elif etype == EquipmentType.RANGED:
             slot = "ranged"
+        elif etype == EquipmentType.SHIELD:
+            slot = "shield"
         else:
             slot = "armor"
         if getattr(self, slot) is item:

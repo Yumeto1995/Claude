@@ -58,6 +58,8 @@ WARES = {
         (ef.nut_seed, 4),
         (ef.herb_seed, 3),
         (ef.mushroom_seed, 5),
+        (ef.potato_seed, 4),
+        (ef.fruit_seed, 5),
     ],
 }
 

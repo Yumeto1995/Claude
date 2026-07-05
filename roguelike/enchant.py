@@ -44,7 +44,8 @@ def _cat(item) -> str:
     eq = getattr(item, "equippable", None)
     if eq is None:
         return ""
-    return "armor" if eq.equipment_type == EquipmentType.ARMOR else "weapon"
+    # 盾は防具と同じく『防護・棘』を付けられる
+    return "armor" if eq.equipment_type in (EquipmentType.ARMOR, EquipmentType.SHIELD) else "weapon"
 
 
 def enchants_of(item) -> Dict[str, int]:
@@ -206,8 +207,11 @@ def looting_mult(entity) -> float:
 
 
 def armor_thorns_frac(entity) -> float:
-    """棘：被弾ダメージを反射する割合。"""
-    return 0.15 * level_of(_armor(entity), "thorns")
+    """棘：被弾ダメージを反射する割合（鎧・盾のうち高いほうを採用）。"""
+    eqp = getattr(entity, "equipment", None)
+    shield = eqp.shield if eqp is not None else None
+    lv = max(level_of(_armor(entity), "thorns"), level_of(shield, "thorns"))
+    return 0.15 * lv
 
 
 def apply_knockback(engine: "Engine", attacker, target, dx: int, dy: int) -> None:

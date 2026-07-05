@@ -135,13 +135,13 @@ class Fighter:
                 and weapon.equippable.stamina_cost is not None
             ):
                 cost = weapon.equippable.stamina_cost
-            armor = eq.armor
-            if (
-                armor is not None
-                and armor.equippable is not None
-                and armor.equippable.stamina_cost is not None
-            ):
-                cost += armor.equippable.stamina_cost  # 防具の重さ分を加算
+            for gear in (eq.armor, eq.shield):        # 防具・盾の重さ分を加算
+                if (
+                    gear is not None
+                    and gear.equippable is not None
+                    and gear.equippable.stamina_cost is not None
+                ):
+                    cost += gear.equippable.stamina_cost
         if self.is_hungry:
             cost = int(cost * HUNGER_STAMINA_MULT)  # 空腹だと攻撃が重くなる
         return cost

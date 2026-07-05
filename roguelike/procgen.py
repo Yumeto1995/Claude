@@ -11,6 +11,10 @@ from game_map import GameMap
 from pathfinding import bresenham
 import tile_types
 
+# エンチャント済みのレア装備は、アイテム1枠あたりこの確率でだけ出る（＝ごく稀）。
+RARE_GEAR_CHANCE = 0.007
+RARE_GEAR = [entity_factories.cursed_katana, entity_factories.guardian_plate]
+
 
 class RectangularRoom:
     """矩形の部屋。左上座標と幅・高さで定義する。"""
@@ -110,48 +114,53 @@ def place_items(
         if any(e.x == x and e.y == y for e in dungeon.entities):
             continue
 
-        # 種類を重み付き抽選（消費アイテム多め、装備は控えめ）
-        templates = [
-            entity_factories.healing_potion,
-            entity_factories.lightning_scroll,
-            entity_factories.confusion_scroll,
-            entity_factories.dagger,
-            entity_factories.sword,
-            entity_factories.spear,
-            entity_factories.katana,
-            entity_factories.battle_axe,
-            entity_factories.leather_armor,
-            entity_factories.chain_mail,
-            entity_factories.wooden_shield,
-            entity_factories.plate_armor,
-            entity_factories.crossbow,
-            entity_factories.cursed_katana,    # レア：エンチャント済み（火炎II・会心I）
-            entity_factories.guardian_plate,   # レア：エンチャント済み（防護I・棘I）
-            entity_factories.ofuda_crit,       # 会心の札
-            entity_factories.slime_shard,
+        # エンチャント済みのレア装備は“ごく稀”にだけ落ちている（通常の抽選表には入れない）
+        if random.random() < RARE_GEAR_CHANCE:
+            gear = random.choice(RARE_GEAR)
+            dungeon.entities.append(gear.spawn(x, y))
+            continue
+
+        # 種類を重み付き抽選（消費アイテム多め、装備は控えめ）。(テンプレ, 重み) の対で管理。
+        pool = [
+            (entity_factories.healing_potion, 34),
+            (entity_factories.lightning_scroll, 10),
+            (entity_factories.confusion_scroll, 8),
+            (entity_factories.dagger, 8),
+            (entity_factories.sword, 4),
+            (entity_factories.spear, 5),
+            (entity_factories.katana, 2),
+            (entity_factories.battle_axe, 2),
+            (entity_factories.leather_armor, 6),
+            (entity_factories.chain_mail, 4),
+            (entity_factories.wooden_shield, 5),
+            (entity_factories.plate_armor, 2),
+            (entity_factories.crossbow, 2),
+            (entity_factories.ofuda_crit, 3),           # 会心の札
+            (entity_factories.slime_shard, 10),
             # 食材：全栄養素を探索で入手できるよう種類を確保
-            # （リンゴ=炭水化物/脂質, 卵=カルシウム/ビタミンA, 肉=たんぱく質/鉄 …）
-            entity_factories.herb,
-            entity_factories.mushroom,
-            entity_factories.meat,
-            entity_factories.nuts,
-            entity_factories.egg,
-            entity_factories.potato,
-            entity_factories.fruit,
-            entity_factories.shellfish,
-            entity_factories.honey,
-            entity_factories.poison_mushroom,
-            entity_factories.nut_seed,
-            entity_factories.herb_seed,
-            entity_factories.mushroom_seed,
-            entity_factories.ranch_key,
-            entity_factories.fishery_key,
-            entity_factories.chicken,
-            entity_factories.cow,
-            entity_factories.bait,
+            (entity_factories.herb, 6),
+            (entity_factories.mushroom, 6),
+            (entity_factories.meat, 6),
+            (entity_factories.nuts, 6),
+            (entity_factories.egg, 4),
+            (entity_factories.potato, 5),
+            (entity_factories.fruit, 5),
+            (entity_factories.shellfish, 4),
+            (entity_factories.honey, 3),
+            (entity_factories.poison_mushroom, 4),
+            # 種（栽培のタネ。畑で育てて増やせる）
+            (entity_factories.nut_seed, 4),
+            (entity_factories.herb_seed, 4),
+            (entity_factories.mushroom_seed, 4),
+            (entity_factories.potato_seed, 4),
+            (entity_factories.fruit_seed, 4),
+            (entity_factories.ranch_key, 2),
+            (entity_factories.fishery_key, 2),
+            (entity_factories.chicken, 3),
+            (entity_factories.cow, 3),
+            (entity_factories.bait, 4),
         ]
-        weights = [34, 10, 8, 8, 4, 5, 2, 2, 6, 4, 5, 2, 2, 1, 1, 3, 10, 6, 6, 6, 6, 4, 5, 5, 4, 3, 4, 4, 4, 4, 2, 2, 3, 3, 4]
-        template = random.choices(templates, weights=weights)[0]
+        template = random.choices([t for t, _ in pool], weights=[w for _, w in pool])[0]
         dungeon.entities.append(template.spawn(x, y))
 
 
