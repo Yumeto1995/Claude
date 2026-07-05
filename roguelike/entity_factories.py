@@ -116,6 +116,31 @@ goblin_greatsword = Entity(
 )
 boss.loot = goblin_greatsword
 
+# 追加の近接武器（短剣＜槍＜刀＜剣＜戦斧 の攻撃力／消費スタミナの階段）
+spear = Entity(
+    sprite="spear",
+    name="槍",
+    blocks_movement=False,
+    # 中量：短剣と剣の中間。バランス型
+    equippable=Equippable(EquipmentType.WEAPON, power_bonus=5, stamina_cost=22),
+)
+
+katana = Entity(
+    sprite="katana",
+    name="刀",
+    blocks_movement=False,
+    # 侍向け：高火力なのに軽快（1点あたりの消費が軽い）
+    equippable=Equippable(EquipmentType.WEAPON, power_bonus=7, stamina_cost=26),
+)
+
+battle_axe = Entity(
+    sprite="axe",
+    name="戦斧",
+    blocks_movement=False,
+    # 最重量：大火力だが1振りが非常に重く連撃できない
+    equippable=Equippable(EquipmentType.WEAPON, power_bonus=8, stamina_cost=44),
+)
+
 # --- 遠距離武器・弾 ---
 # 弓：ranged 枠に装備（近接武器と両立）。矢を1本消費して直線上の最初の敵を射る。
 bow = Entity(
@@ -123,6 +148,14 @@ bow = Entity(
     name="弓",
     blocks_movement=False,
     equippable=Equippable(EquipmentType.RANGED, power_bonus=4, stamina_cost=20, max_range=6),
+)
+
+# クロスボウ：弓より高威力だが重く（消費大）、射程はやや短い。矢を共用する。
+crossbow = Entity(
+    sprite="crossbow",
+    name="クロスボウ",
+    blocks_movement=False,
+    equippable=Equippable(EquipmentType.RANGED, power_bonus=7, stamina_cost=34, max_range=5),
 )
 
 # 矢：スタックする弾。count 本まとめて1スロット。撃つたびに1減り、0で尽きる。
@@ -146,6 +179,22 @@ chain_mail = Entity(
     name="鎖帷子",
     blocks_movement=False,
     equippable=Equippable(EquipmentType.ARMOR, defense_bonus=4, stamina_cost=6),
+)
+
+# 木の盾：革と鎖の中間の軽い防具（防具枠は1つなので鎧と択一）
+wooden_shield = Entity(
+    sprite="shield",
+    name="木の盾",
+    blocks_movement=False,
+    equippable=Equippable(EquipmentType.ARMOR, defense_bonus=2, stamina_cost=3),
+)
+
+# 板金鎧：最高防御だが非常に重く、攻撃のたびに大きくスタミナを食う
+plate_armor = Entity(
+    sprite="plate_armor",
+    name="板金鎧",
+    blocks_movement=False,
+    equippable=Equippable(EquipmentType.ARMOR, defense_bonus=7, stamina_cost=12),
 )
 
 # --- 素材アイテム（効果なし。将来の合成用などに持っておく）---

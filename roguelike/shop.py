@@ -32,9 +32,15 @@ WARES = {
     ],
     "weapon": [
         (ef.dagger, 40),
+        (ef.spear, 90),
+        (ef.katana, 200),
         (ef.sword, 150),
+        (ef.battle_axe, 170),
+        (ef.crossbow, 160),
         (ef.leather_armor, 50),
+        (ef.wooden_shield, 70),
         (ef.chain_mail, 180),
+        (ef.plate_armor, 260),
     ],
     "food": [
         # 全栄養素を補給できる品揃え（栄養は非表示＝食べて覚える）

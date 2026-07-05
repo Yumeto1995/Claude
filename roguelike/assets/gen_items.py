@@ -185,6 +185,108 @@ def make_chain_mail():
     return s
 
 
+def make_spear():
+    """細い菱形の穂先＋長い木の柄。"""
+    s = surf()
+    steel, light, dark = (208, 216, 232), (248, 250, 255), (120, 132, 156)
+    wood, wl, wd = (120, 84, 50), (156, 116, 74), (86, 58, 34)
+    rect(s, 30, 22, 33, 58, wood)                 # 柄
+    rect(s, 30, 22, 30, 58, wl); rect(s, 33, 22, 33, 58, wd)
+    pygame.draw.polygon(s, steel, [(31, 4), (37, 19), (31, 26), (25, 19)])  # 穂先(菱)
+    pygame.draw.polygon(s, light, [(31, 4), (31, 26), (25, 19)])
+    pygame.draw.polygon(s, dark, [(31, 4), (37, 19), (31, 26)])
+    rect(s, 27, 21, 36, 23, (226, 186, 78))       # 付け根の金具
+    outline_pass(s, OL)
+    return s
+
+
+def make_katana():
+    """反りのある細身の刀身＋丸鍔＋黒い柄巻き。"""
+    s = surf()
+    steel, light, dark = (214, 222, 236), (250, 252, 255), (128, 140, 164)
+    for i, y in enumerate(range(10, 45)):
+        x = int(35 - i * 0.26)                    # 上ほど右＝ゆるい反り
+        rect(s, x, y, x + 3, y, steel)
+        px(s, x, y, light)                        # 峰の照り
+        px(s, x + 3, y, dark)                     # 刃の影
+    px(s, 35, 9, light)                           # 切っ先
+    disc(s, 25, 47, 4, (58, 62, 72)); disc(s, 25, 47, 3, (150, 120, 60))  # 丸鍔
+    rect(s, 18, 48, 25, 58, (40, 44, 52))         # 柄（黒い握り）
+    for k in range(49, 58, 2):
+        px(s, 21, k, (150, 120, 60))              # 柄巻きの菱
+    outline_pass(s, OL)
+    return s
+
+
+def make_axe():
+    """縦の木の柄＋右側の大きな三日月の斧頭。"""
+    s = surf()
+    wood, wl, wd = (120, 84, 50), (156, 116, 74), (86, 58, 34)
+    steel, light, dark = (196, 204, 220), (238, 242, 250), (120, 130, 152)
+    rect(s, 30, 10, 33, 58, wood)                 # 柄
+    rect(s, 30, 10, 30, 58, wl); rect(s, 33, 10, 33, 58, wd)
+    head = [(33, 11), (49, 14), (55, 22), (49, 31), (33, 29)]  # 大きな三日月の刃
+    pygame.draw.polygon(s, steel, head)
+    pygame.draw.polygon(s, light, [(33, 11), (49, 14), (44, 18), (33, 17)])  # 受光
+    pygame.draw.polygon(s, dark, [(33, 24), (49, 31), (44, 26), (33, 28)])   # 影
+    pygame.draw.polygon(s, (232, 236, 244), [(49, 14), (55, 22), (49, 31)])  # 刃先の照り
+    disc(s, 31, 34, 2, (60, 64, 74))              # 柄頭の金具
+    outline_pass(s, OL)
+    return s
+
+
+def make_shield():
+    """木の五角盾＋金属の縁＋中央のボス（鋲）。"""
+    s = surf()
+    wood, wl, wd = (138, 96, 54), (176, 130, 78), (96, 64, 36)
+    rim = (150, 158, 176)
+    pts = [(20, 15), (44, 15), (46, 37), (32, 53), (18, 37)]
+    pygame.draw.polygon(s, wood, pts)
+    pygame.draw.polygon(s, wl, [(20, 15), (44, 15), (44, 20), (20, 20)])  # 上の受光
+    pygame.draw.polygon(s, wd, [(18, 37), (46, 37), (32, 53)])            # 下の影
+    for x in range(24, 42, 5):
+        rect(s, x, 18, x, 48, wd)                 # 板の縦目
+    pygame.draw.polygon(s, rim, pts, 2)           # 金属縁
+    disc(s, 32, 33, 4, rim); disc(s, 32, 33, 2, (214, 220, 234))  # ボス
+    outline_pass(s, OL)
+    return s
+
+
+def make_plate_armor():
+    """明るい鋼の胴鎧＋中央リッジ＋肩当て（球）。"""
+    s = surf()
+    base, light, dark = (178, 186, 202), (222, 228, 240), (110, 118, 138)
+    pygame.draw.polygon(s, base, [(20, 22), (44, 22), (48, 52), (16, 52)])
+    pygame.draw.polygon(s, light, [(20, 22), (44, 22), (44, 27), (20, 27)])
+    pygame.draw.polygon(s, dark, [(16, 47), (48, 47), (48, 52), (16, 52)])
+    rect(s, 31, 22, 33, 52, light)                # 中央リッジ
+    rect(s, 22, 36, 42, 37, dark)                 # 胴の分割線
+    ball(s, 21, 24, 6, base, light, dark, OL)     # 肩当て
+    ball(s, 43, 24, 6, base, light, dark, OL)
+    outline_pass(s, OL)
+    return s
+
+
+def make_crossbow():
+    """横向きの太い弓（プロド）＋弦＋短い木の銃床＋装填した矢。"""
+    s = surf()
+    wood, wl, wd = (120, 84, 50), (156, 116, 74), (86, 58, 34)
+    steel, hi, dark = (150, 158, 176), (206, 212, 226), (96, 104, 124)
+    # 横向きの弓：中央が上・両端が下の浅い ∩（太め）
+    for x in range(9, 56):
+        y = 22 + int(abs(x - 32) * 0.30)
+        rect(s, x, y, x, y + 3, steel)
+        px(s, x, y, hi); px(s, x, y + 3, dark)
+    pygame.draw.line(s, (232, 232, 238), (10, 22), (54, 22))   # 弦
+    rect(s, 30, 22, 34, 54, wood)                 # 銃床（縦・短め）
+    rect(s, 30, 22, 30, 54, wl); rect(s, 34, 22, 34, 54, wd)
+    rect(s, 28, 46, 36, 50, wd)                   # 握り
+    rect(s, 31, 14, 33, 24, (206, 206, 210))      # 装填した矢
+    pygame.draw.polygon(s, steel, [(32, 9), (35, 15), (29, 15)])
+    outline_pass(s, OL)
+    return s
+
+
 # ============================================================ 素材・種・大切なもの
 def make_material():
     """青い鉱石のかけら（多面の結晶）。"""
@@ -373,8 +475,14 @@ def generate():
         "dish": make_dish(),
         "dagger": make_dagger(),
         "sword": make_sword(),
+        "spear": make_spear(),
+        "katana": make_katana(),
+        "axe": make_axe(),
         "leather_armor": make_leather_armor(),
         "chain_mail": make_chain_mail(),
+        "shield": make_shield(),
+        "plate_armor": make_plate_armor(),
+        "crossbow": make_crossbow(),
         "material": make_material(),
         "seed": make_seed(),
         "key_item": make_key_item(),
