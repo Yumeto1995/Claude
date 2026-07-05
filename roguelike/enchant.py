@@ -27,6 +27,7 @@ ENCHANTS: Dict[str, dict] = {
     "fire":    {"name": "火炎", "cat": "weapon", "max": 3, "desc": "命中時に追加ダメージ +3/Lv"},
     "knock":   {"name": "撃退", "cat": "weapon", "max": 2, "desc": "敵をノックバックする"},
     "loot":    {"name": "略奪", "cat": "weapon", "max": 3, "desc": "撃破の経験値 +20%/Lv"},
+    "crit":    {"name": "会心", "cat": "weapon", "max": 3, "desc": "会心率 +8%/Lv"},
     "protect": {"name": "防護", "cat": "armor",  "max": 4, "defense": 1, "desc": "防御力+1/Lv"},
     "thorns":  {"name": "棘",   "cat": "armor",  "max": 3, "desc": "被弾時に反射 15%/Lv"},
     "light":   {"name": "軽量", "cat": "weapon", "max": 3, "stamina": -3, "desc": "攻撃の消費スタミナ -3/Lv"},
@@ -35,7 +36,7 @@ ENCHANTS: Dict[str, dict] = {
 # お札名 → 符呪ID
 OFUDA: Dict[str, str] = {
     "鋭利の札": "sharp", "火炎の札": "fire", "撃退の札": "knock", "略奪の札": "loot",
-    "防護の札": "protect", "棘の札": "thorns", "軽量の札": "light",
+    "防護の札": "protect", "棘の札": "thorns", "軽量の札": "light", "会心の札": "crit",
 }
 
 
@@ -146,6 +147,17 @@ def apply(engine: "Engine", target: "Entity", name: str) -> None:
         colors.LEVEL_UP)
 
 
+def preset(item: "Entity", ench: Dict[str, int]) -> "Entity":
+    """テンプレートにあらかじめ符呪を付ける（エンチャント済みのレア装備を作る用）。
+
+    entity_factories でレア装備を定義した直後に呼ぶ。spawn は deepcopy するので、
+    テンプレートに付けた符呪はそのまま各インスタンスに複製される。"""
+    item.enchants = dict(ench)
+    _recompute(item)
+    _rename(item)
+    return item
+
+
 def stat_text(item) -> str:
     """メニュー表示用：符呪一覧＋現在の攻/防。"""
     eq = getattr(item, "equippable", None)
@@ -173,9 +185,19 @@ def _armor(entity):
     return eqp.armor if eqp is not None else None
 
 
+def _ranged(entity):
+    eqp = getattr(entity, "equipment", None)
+    return eqp.ranged if eqp is not None else None
+
+
 def weapon_fire_bonus(entity) -> int:
     """火炎：命中時の追加ダメージ。"""
     return 3 * level_of(_weapon(entity), "fire")
+
+
+def weapon_crit_frac(entity, ranged: bool = False) -> float:
+    """会心：符呪『会心』による会心率の上乗せ（近接は装備中の武器、射撃は弓/クロスボウ）。"""
+    return 0.08 * level_of(_ranged(entity) if ranged else _weapon(entity), "crit")
 
 
 def looting_mult(entity) -> float:

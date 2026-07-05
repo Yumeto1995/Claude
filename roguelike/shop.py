@@ -27,6 +27,7 @@ WARES = {
         (ef.ofuda_knock, 70),     # 武器：撃退（ノックバック）
         (ef.ofuda_loot, 90),      # 武器：略奪（撃破XP増）
         (ef.ofuda_light, 70),     # 武器：軽量（消費スタミナ減）
+        (ef.ofuda_crit, 90),      # 武器：会心（会心率+8%/Lv）
         (ef.ofuda_protect, 60),   # 防具：防護（防御力+1/Lv）
         (ef.ofuda_thorns, 90),    # 防具：棘（反射）
     ],
@@ -75,6 +76,7 @@ def info(engine: "Engine", kind: str) -> List[str]:
 
 
 def _stat_text(template) -> str:
+    from components.equippable import EquipmentType
     eq = template.equippable
     if eq is None:
         return ""
@@ -83,6 +85,16 @@ def _stat_text(template) -> str:
         parts.append(f"攻+{eq.power_bonus}")
     if eq.defense_bonus:
         parts.append(f"防+{eq.defense_bonus}")
+    if eq.max_range:
+        parts.append(f"射程{eq.max_range}")   # 遠距離武器の射程
+    if getattr(eq, "crit_chance", 0):
+        parts.append(f"会心{int(round(eq.crit_chance * 100))}%")
+    if eq.stamina_cost:
+        # 武器/弓＝1撃(1射)の消費スタミナ、防具＝装備中に攻撃が重くなる分(加算)
+        if eq.equipment_type == EquipmentType.ARMOR:
+            parts.append(f"重さ+{eq.stamina_cost}")
+        else:
+            parts.append(f"消費{eq.stamina_cost}")
     return "  " + " ".join(parts) if parts else ""
 
 

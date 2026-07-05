@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import random
 from typing import TYPE_CHECKING
 
 import colors
@@ -11,6 +12,23 @@ from components.fighter import HUNGER_DAMAGE_MULT
 if TYPE_CHECKING:
     from engine import Engine
     from entity import Entity
+
+CRIT_MULT = 1.5  # 会心（クリティカル）のダメージ倍率
+
+
+def _roll_crit(entity: "Entity", ranged: bool = False) -> bool:
+    """会心（クリティカル）判定。装備の会心率＋符呪『会心』＋スキル『運』を合算して1回抽選。"""
+    chance = 0.0
+    eqp = getattr(entity, "equipment", None)
+    if eqp is not None:
+        weapon = eqp.ranged if ranged else eqp.weapon
+        if weapon is not None and weapon.equippable is not None:
+            chance += getattr(weapon.equippable, "crit_chance", 0.0)
+    chance += enchant.weapon_crit_frac(entity, ranged=ranged)
+    sk = getattr(entity, "skills", None)
+    if sk is not None:
+        chance += sk.crit_chance()
+    return chance > 0.0 and random.random() < chance
 
 
 class ReturnToTitle(Exception):
@@ -390,12 +408,10 @@ class MeleeAction(ActionWithDirection):
         if target.fighter.is_hungry:
             damage = int(damage * HUNGER_DAMAGE_MULT)  # 空腹だと受けるダメージ増
         damage = max(1, damage)  # 命中すれば最低1ダメージ（防御で完全無効化しない）
-        # スキル『運』：会心の一撃（1.5倍）
-        crit = False
-        sk = getattr(entity, "skills", None)
-        if sk is not None and sk.roll(sk.crit_chance()):
-            damage = int(damage * 1.5)
-            crit = True
+        # 会心の一撃（1.5倍）：武器の会心率＋符呪『会心』＋スキル『運』の合算で判定
+        crit = _roll_crit(entity, ranged=False)
+        if crit:
+            damage = int(damage * CRIT_MULT)
         attack_color = colors.PLAYER_ATK if entity is engine.player else colors.ENEMY_ATK
         prefix = "会心の一撃！ " if crit else ""
         engine.message_log.add_message(
@@ -524,11 +540,10 @@ class RangedAttackAction(ActionWithDirection):
         if target.fighter.is_hungry:
             damage = int(damage * HUNGER_DAMAGE_MULT)
         damage = max(1, damage)
-        crit = False
-        sk = getattr(entity, "skills", None)
-        if sk is not None and sk.roll(sk.crit_chance()):
-            damage = int(damage * 1.5)
-            crit = True
+        # 会心（射撃）：弓/クロスボウの会心率＋符呪『会心』＋スキル『運』
+        crit = _roll_crit(entity, ranged=True)
+        if crit:
+            damage = int(damage * CRIT_MULT)
         attack_color = colors.PLAYER_ATK if entity is engine.player else colors.ENEMY_ATK
         prefix = "会心の一撃！ " if crit else ""
         engine.message_log.add_message(

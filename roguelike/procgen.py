@@ -125,6 +125,9 @@ def place_items(
             entity_factories.wooden_shield,
             entity_factories.plate_armor,
             entity_factories.crossbow,
+            entity_factories.cursed_katana,    # レア：エンチャント済み（火炎II・会心I）
+            entity_factories.guardian_plate,   # レア：エンチャント済み（防護I・棘I）
+            entity_factories.ofuda_crit,       # 会心の札
             entity_factories.slime_shard,
             # 食材：全栄養素を探索で入手できるよう種類を確保
             # （リンゴ=炭水化物/脂質, 卵=カルシウム/ビタミンA, 肉=たんぱく質/鉄 …）
@@ -147,7 +150,7 @@ def place_items(
             entity_factories.cow,
             entity_factories.bait,
         ]
-        weights = [34, 10, 8, 8, 4, 5, 2, 2, 6, 4, 5, 2, 2, 10, 6, 6, 6, 6, 4, 5, 5, 4, 3, 4, 4, 4, 4, 2, 2, 3, 3, 4]
+        weights = [34, 10, 8, 8, 4, 5, 2, 2, 6, 4, 5, 2, 2, 1, 1, 3, 10, 6, 6, 6, 6, 4, 5, 5, 4, 3, 4, 4, 4, 4, 2, 2, 3, 3, 4]
         template = random.choices(templates, weights=weights)[0]
         dungeon.entities.append(template.spawn(x, y))
 

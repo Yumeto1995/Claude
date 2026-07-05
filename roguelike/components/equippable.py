@@ -25,6 +25,7 @@ class Equippable:
         defense_bonus: int = 0,
         stamina_cost: Optional[int] = None,
         max_range: int = 0,
+        crit_chance: float = 0.0,
     ):
         self.equipment_type = equipment_type
         self.power_bonus = power_bonus
@@ -34,3 +35,6 @@ class Equippable:
         self.stamina_cost = stamina_cost
         # 遠距離武器の射程（マス数）。近接・防具は 0。
         self.max_range = max_range
+        # 会心（クリティカル）率 0.0〜1.0。武器ごとの個性（軽い/鋭い武器ほど高い）。
+        # 命中時にこの確率で会心＝ダメージ1.5倍。符呪『会心』やスキル『運』と加算される。
+        self.crit_chance = crit_chance

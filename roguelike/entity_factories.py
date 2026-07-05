@@ -96,7 +96,7 @@ dagger = Entity(
     name="短剣",
     blocks_movement=False,
     # 軽い：攻撃力控えめだがスタミナ消費が少なく手数で攻める
-    equippable=Equippable(EquipmentType.WEAPON, power_bonus=3, stamina_cost=14),
+    equippable=Equippable(EquipmentType.WEAPON, power_bonus=3, stamina_cost=14, crit_chance=0.10),
 )
 
 sword = Entity(
@@ -104,7 +104,7 @@ sword = Entity(
     name="剣",
     blocks_movement=False,
     # 重い：高火力だがスタミナ消費が大きく、連続では振れない
-    equippable=Equippable(EquipmentType.WEAPON, power_bonus=6, stamina_cost=36),
+    equippable=Equippable(EquipmentType.WEAPON, power_bonus=6, stamina_cost=36, crit_chance=0.05),
 )
 
 # ボス撃破報酬：レアな大剣（剣より高火力）。ボスは倒すと床に落とす。
@@ -112,7 +112,7 @@ goblin_greatsword = Entity(
     sprite="sword",
     name="ゴブリンロードの大剣",
     blocks_movement=False,
-    equippable=Equippable(EquipmentType.WEAPON, power_bonus=9, stamina_cost=30),
+    equippable=Equippable(EquipmentType.WEAPON, power_bonus=9, stamina_cost=30, crit_chance=0.08),
 )
 boss.loot = goblin_greatsword
 
@@ -122,7 +122,7 @@ spear = Entity(
     name="槍",
     blocks_movement=False,
     # 中量：短剣と剣の中間。バランス型
-    equippable=Equippable(EquipmentType.WEAPON, power_bonus=5, stamina_cost=22),
+    equippable=Equippable(EquipmentType.WEAPON, power_bonus=5, stamina_cost=22, crit_chance=0.05),
 )
 
 katana = Entity(
@@ -130,7 +130,7 @@ katana = Entity(
     name="刀",
     blocks_movement=False,
     # 侍向け：高火力なのに軽快（1点あたりの消費が軽い）
-    equippable=Equippable(EquipmentType.WEAPON, power_bonus=7, stamina_cost=26),
+    equippable=Equippable(EquipmentType.WEAPON, power_bonus=7, stamina_cost=26, crit_chance=0.15),
 )
 
 battle_axe = Entity(
@@ -138,7 +138,7 @@ battle_axe = Entity(
     name="戦斧",
     blocks_movement=False,
     # 最重量：大火力だが1振りが非常に重く連撃できない
-    equippable=Equippable(EquipmentType.WEAPON, power_bonus=8, stamina_cost=44),
+    equippable=Equippable(EquipmentType.WEAPON, power_bonus=8, stamina_cost=44, crit_chance=0.0),
 )
 
 # --- 遠距離武器・弾 ---
@@ -147,7 +147,7 @@ bow = Entity(
     sprite="bow",
     name="弓",
     blocks_movement=False,
-    equippable=Equippable(EquipmentType.RANGED, power_bonus=4, stamina_cost=20, max_range=6),
+    equippable=Equippable(EquipmentType.RANGED, power_bonus=4, stamina_cost=20, max_range=6, crit_chance=0.05),
 )
 
 # クロスボウ：弓より高威力だが重く（消費大）、射程はやや短い。矢を共用する。
@@ -155,7 +155,7 @@ crossbow = Entity(
     sprite="crossbow",
     name="クロスボウ",
     blocks_movement=False,
-    equippable=Equippable(EquipmentType.RANGED, power_bonus=7, stamina_cost=34, max_range=5),
+    equippable=Equippable(EquipmentType.RANGED, power_bonus=7, stamina_cost=34, max_range=5, crit_chance=0.12),
 )
 
 # 矢：スタックする弾。count 本まとめて1スロット。撃つたびに1減り、0で尽きる。
@@ -316,6 +316,25 @@ ofuda_loot    = Entity(sprite="scroll", name="略奪の札", blocks_movement=Fal
 ofuda_protect = Entity(sprite="scroll", name="防護の札", blocks_movement=False, item_category=ItemCategory.MATERIAL)
 ofuda_thorns  = Entity(sprite="scroll", name="棘の札", blocks_movement=False, item_category=ItemCategory.MATERIAL)
 ofuda_light   = Entity(sprite="scroll", name="軽量の札", blocks_movement=False, item_category=ItemCategory.MATERIAL)
+ofuda_crit    = Entity(sprite="scroll", name="会心の札", blocks_movement=False, item_category=ItemCategory.MATERIAL)
+
+# --- エンチャント済みのレア装備（あらかじめ符呪付き。ダンジョンのレアドロップ）---
+# enchant.preset でテンプレートに符呪を焼き込む。spawn は deepcopy するので各個体に複製される。
+import enchant as _enchant  # noqa: E402  レア装備の事前符呪に使う
+
+# 妖刀：刀ベースに火炎II・会心I。高会心の攻撃特化レア。
+cursed_katana = Entity(
+    sprite="katana", name="妖刀", blocks_movement=False,
+    equippable=Equippable(EquipmentType.WEAPON, power_bonus=8, stamina_cost=26, crit_chance=0.15),
+)
+_enchant.preset(cursed_katana, {"fire": 2, "crit": 1})
+
+# 守護の板金鎧：板金鎧ベースに防護I・棘I。防御特化レア。
+guardian_plate = Entity(
+    sprite="plate_armor", name="守護の板金鎧", blocks_movement=False,
+    equippable=Equippable(EquipmentType.ARMOR, defense_bonus=7, stamina_cost=12),
+)
+_enchant.preset(guardian_plate, {"protect": 1, "thorns": 1})
 
 # 料理は固定テンプレートではなく cooking.cook() が動的に生成する。
 
