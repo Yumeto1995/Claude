@@ -8,6 +8,8 @@ if TYPE_CHECKING:
 # スタミナ・満腹度の調整値（ここを変えればバランス調整できる）
 DEFAULT_ATTACK_STAMINA_COST = 30  # 武器未装備（素手）時の攻撃消費スタミナ
 STAMINA_REGEN = 12                # 攻撃以外のターンで回復するスタミナ
+HP_REGEN = 1                      # 歩行などで自然回復するHP量
+HP_REGEN_INTERVAL = 4             # このターン数ごとに1回HP回復（小さいほど速い）
 SATIETY_DRAIN = 1                 # 満腹度が1回に減る量
 # このターン数ごとに1回だけ減る（大きいほど空腹になりにくい）。
 # 5 = 0.2/ターン。1階の踏破が概ね200〜250ターン（探索・戦闘込み）なので、満腹度100の
@@ -161,3 +163,21 @@ class Fighter:
             self.stamina = min(
                 self.max_stamina, self.stamina + int(round(STAMINA_REGEN * mult))
             )
+
+    def regenerate_hp(self) -> None:
+        """歩行などの経過ターンで少しずつHPを自然回復する。
+
+        完全に空腹（満腹度0）のときは回復しない＝食事の重要性を保つ。
+        栄養状態（たんぱく質欠乏で治癒↓、好調で↑）で回復速度が変わる。
+        """
+        if self.is_hungry or self.hp <= 0 or self.hp >= self.max_hp:
+            return
+        self._hp_regen_tick = getattr(self, "_hp_regen_tick", 0) + 1
+        nut = getattr(self.entity, "nutrition", None)
+        interval = HP_REGEN_INTERVAL
+        if nut is not None:
+            interval = nut.hp_regen_interval(HP_REGEN_INTERVAL)
+        if self._hp_regen_tick < interval:
+            return
+        self._hp_regen_tick = 0
+        self.hp += HP_REGEN

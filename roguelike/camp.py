@@ -100,7 +100,7 @@ def options(engine: "Engine") -> List[Dict[str, Any]]:
             opts.append({"text": f"預ける: {it.name}",
                          "enabled": not equip.item_is_equipped(it),
                          "kind": "deposit", "data": it})
-        space = len(items) < engine.player.inventory.capacity
+        space = not engine.player.inventory.is_full
         for it in list(engine.storage):
             opts.append({"text": f"取り出す: {it.name}", "enabled": space,
                          "kind": "withdraw", "data": it})
@@ -134,7 +134,7 @@ def options(engine: "Engine") -> List[Dict[str, Any]]:
             if economy.is_sellable(it) and not equip.item_is_equipped(it):
                 opts.append({"text": f"出荷: {it.name}{economy.quality_suffix(it)}（{economy.sell_value(it)}）",
                              "enabled": True, "kind": "ship", "data": it})
-        space = len(items) < engine.player.inventory.capacity
+        space = not engine.player.inventory.is_full
         for it in list(engine.shipping_bin):
             opts.append({"text": f"戻す: {it.name}{economy.quality_suffix(it)}",
                          "enabled": space, "kind": "unship", "data": it})
@@ -270,7 +270,7 @@ def select(engine: "Engine") -> None:
             engine.storage.append(item)
     elif kind == "withdraw":
         item = cur["data"]
-        if len(inv.items) < inv.capacity and item in engine.storage:
+        if inv.can_accept(item) and item in engine.storage:
             engine.storage.remove(item)
             inv.items.append(item)
     elif kind == "plant":
@@ -298,7 +298,7 @@ def select(engine: "Engine") -> None:
             engine.shipping_bin.append(item)
     elif kind == "unship":
         item = cur["data"]
-        if item in engine.shipping_bin and len(inv.items) < inv.capacity:
+        if item in engine.shipping_bin and inv.can_accept(item):
             engine.shipping_bin.remove(item)
             inv.items.append(item)
     elif kind == "upgrade_do":

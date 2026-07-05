@@ -104,7 +104,7 @@ def options(engine: "Engine", kind: str) -> List[Dict[str, Any]]:
         return _sell_options(engine)
     wealth = engine.player.level.wealth()
     inv = engine.player.inventory
-    full = len(inv.items) >= inv.capacity
+    full = inv.is_full
     opts = []
     for i, (tmpl, price) in enumerate(WARES.get(kind, [])):
         opts.append({
@@ -122,7 +122,7 @@ def buy(engine: "Engine", kind: str, index: int) -> None:
     tmpl, price = wares[index]
     player = engine.player
     inv = player.inventory
-    if len(inv.items) >= inv.capacity:
+    if inv.is_full:
         engine.message_log.add_message("持ち物がいっぱいで買えない。", colors.NO_EFFECT)
         return
     lv = player.level

@@ -165,6 +165,7 @@ class Engine:
                 self._grow_camp()   # 1歩で畑・牧柵・いけすが育つ
             if not action.is_attack:
                 self.player.fighter.regenerate_stamina()  # 攻撃以外で回復
+                self.player.fighter.regenerate_hp()       # 歩行などでHPも自然回復（空腹時は不可）
             # 満腹度を消費。空腹になった瞬間は警告を出す。
             was_hungry = self.player.fighter.is_hungry
             self.player.fighter.drain_satiety()
@@ -205,6 +206,11 @@ class Engine:
         # 序盤の生存を助ける回復薬（難易度緩和）
         for _ in range(3):
             self.player.inventory.items.append(entity_factories.healing_potion.spawn(0, 0))
+        # 拠点の倉庫に各種の種を入れておく＝最初から畑で農業を始められる
+        for seed in (entity_factories.nut_seed, entity_factories.herb_seed,
+                     entity_factories.mushroom_seed):
+            for _ in range(3):
+                self.storage.append(seed.spawn(0, 0))
 
     def enter_village(self) -> None:
         """村（開始地点）へ。NPCと話し、入口からダンジョンへ向かう。"""
@@ -663,12 +669,12 @@ class Engine:
         # 牧柵/いけすの中身（動物・魚）はアイテムで返す（畑の作物は失われる）
         if content is not None and kind in ("pen", "tank"):
             tmpl = livestock.get(content.get("src"))
-            if tmpl is not None and len(inv.items) < inv.capacity:
+            if tmpl is not None and not inv.is_full:
                 inv.items.append(tmpl.spawn(0, 0))
                 recovered.append(content["src"])
         # 設置物本体：アイテム建設は本体を、経験値建設は同額を戻す
         if item is not None:
-            if len(inv.items) < inv.capacity:
+            if not inv.is_full:
                 inv.items.append(entity_factories.sprinkler.spawn(0, 0))
                 recovered.append(label)
         elif cost > 0:                       # 経験値建設は同額を戻す（無料建設は戻しなし）

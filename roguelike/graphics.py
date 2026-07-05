@@ -1227,7 +1227,8 @@ class Renderer:
 
         # タイトル行：見出し＋所持数
         self._text("持ち物", x + 18, y + 10, color=self.TEXT_GOLD, bold=True)
-        self._text(f"{len(all_items)} / {engine.player.inventory.capacity}",
+        # 所持数は容量を消費する分だけ（大切なものは別枠なので数えない）
+        self._text(f"{engine.player.inventory.used} / {engine.player.inventory.capacity}",
                    x + 122, y + 10, color=self.TEXT_DIM)
 
         # 分類タブ（選択中は明るい箱＋金文字）

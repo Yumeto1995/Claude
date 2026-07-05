@@ -162,7 +162,8 @@ class PickupAction(Action):
             self.consumes_turn = False
             return
         inv = entity.inventory
-        if inv is None or len(inv.items) >= inv.capacity:
+        if inv is None or not inv.can_accept(item):
+            # 大切なものは can_accept が常に True なので、ここには来ない＝拾い逃さない
             engine.message_log.add_message(
                 f"持ち物がいっぱいで {item.name} を拾えない。", colors.NO_EFFECT
             )

@@ -5,10 +5,13 @@
 """
 from __future__ import annotations
 
+import random
 from typing import TYPE_CHECKING, Optional
 
 import colors
 from components.level import HP_PER_LEVEL, POWER_PER_LEVEL
+
+SEED_DROP_CHANCE = 0.08  # 敵撃破時に種をこぼす確率（栽培のタネを探索でも入手できる）
 
 if TYPE_CHECKING:
     from engine import Engine
@@ -74,6 +77,13 @@ def _die(engine: "Engine", target: "Entity") -> None:
             drop = loot.spawn(target.x + half, target.y + half)
             engine.game_map.entities.append(drop)
             engine.message_log.add_message(f"{loot.name} を落とした！", colors.LEVEL_UP)
+        # 稀に種をこぼす（栽培のタネを探索でも入手できる）
+        if random.random() < SEED_DROP_CHANCE:
+            import entity_factories  # 遅延import（循環回避）
+            seed = random.choice([entity_factories.nut_seed, entity_factories.herb_seed,
+                                  entity_factories.mushroom_seed])
+            engine.game_map.entities.append(seed.spawn(target.x, target.y))
+            engine.message_log.add_message(f"{seed.name} がこぼれ落ちた。", colors.ITEM)
         target.size = 1                  # 死体は通常サイズに
         target.name = f"{target.name}の死体"
     target.sprite = "corpse"

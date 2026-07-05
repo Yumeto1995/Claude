@@ -43,16 +43,20 @@ FOOD_NUTRITION: Dict[str, Dict[str, int]] = {
 
 # 蓄積ストアの範囲としきい値
 MAX = 100.0
-START = 60.0
+START = 70.0
 LOW = 20.0       # これ未満で欠乏症状を発症
 RECOVER = 32.0   # ここまで戻ると症状解消（ヒステリシス）
 GOOD = 50.0      # 全栄養がこれ以上で「好調」バフ
 EAT_SCALE = 0.5  # 食事1回で profile×この倍率を蓄積（満腹度とは別系統）
 
-# 1ターンあたりの減衰（マクロは速く、微量栄養は遅い）
+# 1ターンあたりの減衰（マクロは速く、微量栄養は遅い）。
+# テスターの自動プレイで調整：偏食を続けたときの欠乏発症が、炭水化物（主燃料）で
+# 概ね floor2（約190ターン）、脂質/たんぱく質で floor3、微量栄養は floor4〜6 と
+# なるよう設定。満腹度が尽きる前に欠乏で floor1 から詰む…を避けつつ、偏った食事は
+# 中盤以降じわじわ響く。バランス良く食べれば「好調」バフを維持できる。
 DECAY: Dict[str, float] = {
-    "carb": 0.42, "fat": 0.33, "protein": 0.25,
-    "vitA": 0.18, "vitB": 0.22, "vitC": 0.22, "iron": 0.15, "calcium": 0.15,
+    "carb": 0.21, "fat": 0.16, "protein": 0.13,
+    "vitA": 0.09, "vitB": 0.11, "vitC": 0.11, "iron": 0.08, "calcium": 0.08,
 }
 
 # 欠乏症状名（栄養キー → 症状）
@@ -129,14 +133,33 @@ class Nutrition:
 
     @property
     def stamina_regen_mult(self) -> float:
+        # 現実の欠乏症状に対応：脂質＝エネルギー不足、炭水化物＝主燃料切れ、
+        # 脚気(vitB)＝神経・筋の疲労、貧血(iron)＝酸素運搬低下による易疲労。
         m = 1.0
         if "fat" in self.deficient:
             m *= 0.6
+        if "carb" in self.deficient:
+            m *= 0.8   # 炭水化物＝主要エネルギー源。切れると疲れやすい
         if "vitB" in self.deficient:
             m *= 0.6
         if "iron" in self.deficient:
-            m *= 0.7
+            m *= 0.7   # 貧血＝酸素が回らず持久力低下
         return m * (1.15 if self.is_good else 1.0)
+
+    def hp_regen_interval(self, base: int) -> int:
+        """歩行によるHP自然回復の間隔（ターン）。返り値が大きいほど回復が遅い。
+
+        現実の創傷治癒に必要な栄養が欠けると治りが遅れる：たんぱく質＝組織修復の材料、
+        ビタミンC＝コラーゲン生成（壊血病では傷が治らない）。好調なら少し速い。"""
+        mult = 1.0
+        if "protein" in self.deficient:
+            mult *= 2.0    # たんぱく質不足＝組織修復の材料切れ
+        if "vitC" in self.deficient:
+            mult *= 1.5    # 壊血病＝コラーゲン生成障害で創傷治癒が滞る
+        interval = base * mult
+        if self.is_good:
+            interval *= 0.7
+        return max(1, int(round(interval)))
 
     @property
     def satiety_drain_add(self) -> int:
