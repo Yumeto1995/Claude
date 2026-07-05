@@ -84,6 +84,8 @@ def dispatch_event(event: pygame.event.Event, engine: "Engine") -> Optional[Acti
 
         # 村・建物内にいる間は専用の操作
         if getattr(engine, "in_village", False):
+            if engine.inventory_open:
+                return _inventory_keys(key, engine)   # 村でも持ち物を開ける（テント等）
             # 店（買い物）メニュー中
             if getattr(engine, "shop_kind", None) is not None:
                 if key in (pygame.K_UP, pygame.K_w, pygame.K_k):
@@ -103,6 +105,8 @@ def dispatch_event(event: pygame.event.Event, engine: "Engine") -> Optional[Acti
                 return None
             if key in (pygame.K_RETURN, pygame.K_KP_ENTER):
                 return VillageInteractAction()  # 洞窟→ダンジョン / ドア→建物 / 店主→店 / NPC→会話
+            if key == pygame.K_i:
+                return ToggleInventoryAction()   # 村でも持ち物を開ける（魔法のテント等）
             if key == pygame.K_t:
                 return ToggleSkillTreeAction()   # スキルツリー
             if key == pygame.K_ESCAPE:
@@ -255,8 +259,9 @@ def held_movement_action(engine: "Engine") -> Optional[Action]:
             return None  # 設備メニュー中・持ち物を開いている間は歩けない
     elif getattr(engine, "in_village", False):
         if (getattr(engine, "dialogue", None) is not None
-                or getattr(engine, "shop_kind", None) is not None):
-            return None  # 会話中・買い物中は歩けない
+                or getattr(engine, "shop_kind", None) is not None
+                or engine.inventory_open):
+            return None  # 会話中・買い物中・持ち物中は歩けない
     elif (engine.attack_mode or engine.inventory_open
           or getattr(engine, "fire_mode", False)
           or getattr(engine, "throw_item", None) is not None):

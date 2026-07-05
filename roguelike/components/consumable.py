@@ -142,9 +142,11 @@ class TentConsumable(Consumable):
     def activate(self, engine: "Engine", consumer: "Entity") -> bool:
         if engine.in_camp:
             return False
-        if not engine.game_map.safe[consumer.x, consumer.y]:
+        # 村（屋外）か、ダンジョンのセーフルームでだけ張れる
+        in_village = getattr(engine, "in_village", False) and getattr(engine, "building_key", None) is None
+        if not in_village and not engine.game_map.safe[consumer.x, consumer.y]:
             engine.message_log.add_message(
-                "ここではテントを張れない。セーフルームでだけ使える。", colors.NO_EFFECT
+                "ここではテントを張れない。村かセーフルームで使える。", colors.NO_EFFECT
             )
             return False
         engine.message_log.add_message("魔法のテントを張った。", colors.WELCOME)

@@ -752,6 +752,8 @@ class Renderer:
                 self._render_dialogue(engine)
             if getattr(engine, "shop_kind", None) is not None:
                 self._render_shop_menu(engine)
+            if engine.inventory_open:
+                self._render_inventory(engine)   # 村でも持ち物を開ける（テント等）
             if getattr(engine, "skill_open", False):
                 self._render_skill_tree(engine)
             pygame.display.flip()

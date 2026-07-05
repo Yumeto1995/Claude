@@ -397,6 +397,8 @@ class Engine:
         """ダンジョンを退避して、歩けるテント内マップに切り替える。"""
         self.dungeon_map = self.game_map
         self.dungeon_pos = (self.player.x, self.player.y)
+        self.camp_from_village = getattr(self, "in_village", False)  # 村から張ったか
+        self.in_village = False   # 拠点描画に切り替える（村判定を一旦オフ）
         self.game_map = camp_map.build_camp_map()
         self.player.x, self.player.y = camp_map.ENTRANCE
         self.game_map.entities = [self.player]
@@ -413,7 +415,11 @@ class Engine:
         self.player.x, self.player.y = self.dungeon_pos
         self.in_camp = False
         self.camp_menu = None
-        self.message_log.add_message("テントをたたんでダンジョンに戻った。", colors.WELCOME)
+        if getattr(self, "camp_from_village", False):
+            self.in_village = True
+            self.message_log.add_message("テントをたたんで村に戻った。", colors.WELCOME)
+        else:
+            self.message_log.add_message("テントをたたんでダンジョンに戻った。", colors.WELCOME)
 
     def _ship_out(self) -> None:
         """出荷箱の中身を売却して経験値(お金)にする（Stardew の出荷箱に相当）。"""
