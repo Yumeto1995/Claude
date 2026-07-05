@@ -1184,15 +1184,27 @@ class Renderer:
             cy += self.LINE_HEIGHT
 
         cy += 8
-        # 選択肢（選択中はハイライトバー）
-        for i, opt in enumerate(camp.options(engine)):
+        # 選択肢（選択中はハイライトバー）。枠に収まらない分はページを分ける。
+        footer_y = wy + wh - 36
+        opts = camp.options(engine)
+        n = len(opts)
+        rows_per_page = max(1, (footer_y - cy - 8) // self.LINE_HEIGHT)
+        cursor = min(engine.camp_cursor, max(0, n - 1))
+        pages = max(1, (n + rows_per_page - 1) // rows_per_page)
+        page = cursor // rows_per_page
+        start = page * rows_per_page
+        for i, opt in enumerate(opts[start:start + rows_per_page]):
             self._camp_line(
                 wx, ww, x, cy + i * self.LINE_HEIGHT,
-                opt["text"], i == engine.camp_cursor, opt.get("enabled", True),
+                opt["text"], start + i == cursor, opt.get("enabled", True),
             )
+        if pages > 1:
+            ptxt = f"ページ {page + 1}/{pages}"
+            self._text(ptxt, wx + ww - 22 - self.font.size(ptxt)[0], y,
+                       color=self.TEXT_DIM, shadow=False)
 
         self._text("↑↓：選択　Enter：決定　ESC：戻る",
-                   x, wy + wh - 36, color=self.TEXT_DIM, shadow=False)
+                   x, footer_y, color=self.TEXT_DIM, shadow=False)
 
     def _camp_line(self, wx: int, ww: int, x: int, y: int,
                    text: str, selected: bool, enabled: bool) -> None:
@@ -1222,14 +1234,30 @@ class Renderer:
         x, y = 24, 20
         width = 706
         header_h = 86
-        height = header_h + max(1, len(items)) * self.ROW_H + 44
+        footer_h = 44
+        # ページング：画面に収まる行数だけ表示し、あふれる分はページを分ける。
+        # カーソルは分類内の通し番号なので page = cursor // 1ページの行数 で決まる。
+        rows_per_page = max(1, (self.screen.get_height() - 2 * y - header_h - footer_h)
+                            // self.ROW_H)
+        n = len(items)
+        cursor = min(engine.inventory_cursor, max(0, n - 1))
+        pages = max(1, (n + rows_per_page - 1) // rows_per_page)
+        page = cursor // rows_per_page
+        start = page * rows_per_page
+        page_items = items[start:start + rows_per_page]
+
+        height = header_h + max(1, len(page_items)) * self.ROW_H + footer_h
         self._draw_window(x, y, width, height)
 
-        # タイトル行：見出し＋所持数
+        # タイトル行：見出し＋所持数（＋ページ）
         self._text("持ち物", x + 18, y + 10, color=self.TEXT_GOLD, bold=True)
         # 所持数は容量を消費する分だけ（大切なものは別枠なので数えない）
         self._text(f"{engine.player.inventory.used} / {engine.player.inventory.capacity}",
                    x + 122, y + 10, color=self.TEXT_DIM)
+        if pages > 1:
+            ptxt = f"ページ {page + 1}/{pages}"
+            self._text(ptxt, x + width - 18 - self.font.size(ptxt)[0], y + 10,
+                       color=self.TEXT_DIM)
 
         # 分類タブ（選択中は明るい箱＋金文字）
         tab_x = x + 12
@@ -1249,16 +1277,15 @@ class Renderer:
                        color=self.TEXT_GOLD if active else self.TEXT_DIM, shadow=active)
             tab_x += tw + 6
 
-        # アイテム一覧（アイコン＋名前＋性能＋装備中バッジ）
+        # アイテム一覧（アイコン＋名前＋性能＋装備中バッジ）。現在ページ分だけ描く
         list_y = y + header_h
         if not items:
             self._text("（なし）", x + 26, list_y + 6, color=self.TEXT_DIM)
         else:
             equipment = engine.player.equipment
-            cursor = min(engine.inventory_cursor, len(items) - 1)
-            for i, item in enumerate(items):
+            for i, item in enumerate(page_items):
                 row_y = list_y + i * self.ROW_H
-                if i == cursor:
+                if start + i == cursor:
                     pygame.draw.rect(screen, (46, 52, 86),
                                      (x + 8, row_y, width - 16, self.ROW_H))
                     pygame.draw.rect(screen, (104, 112, 168),
@@ -1267,7 +1294,7 @@ class Renderer:
                 icon = self.sprites.get(item.sprite)
                 if icon is not None:
                     screen.blit(icon, (x + 20, row_y + (self.ROW_H - TILE_SIZE) // 2))
-                name_color = self.TEXT_GOLD if i == cursor else self.TEXT_MAIN
+                name_color = self.TEXT_GOLD if start + i == cursor else self.TEXT_MAIN
                 disp_name = item.name if getattr(item, "count", 1) <= 1 else f"{item.name} ×{item.count}"
                 self._text(disp_name, x + 62, row_y + 7, color=name_color)
                 slabel, scolor = spoilage.stage(item)   # 鮮度タグ（新鮮/傷み/腐敗）
