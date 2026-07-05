@@ -80,6 +80,11 @@ class Engine:
         # 潜入中のダンジョン各階を保持（上下移動で同じ階に戻れる）。
         # 村に戻ると破棄され、次の潜入では新しいダンジョンになる。
         self.floors = {}
+        # 敵AIのオンライン学習器（基本方策 policy.npz のコピー）。プレイヤーの
+        # 実戦から随時学習し、Engine と一緒にセーブされる。ニューゲーム＝この
+        # __init__ で基本方策へリセットされる。方策が無ければ None（RL無効・A*）。
+        from rl.online import OnlineLearner
+        self.enemy_learner = OnlineLearner.new_default()
         self.enter_village()  # ゲームは村から始まる
 
     BOSS_INTERVAL = 5  # この階数ごとにボスフロア（5,10,15…）

@@ -48,4 +48,14 @@ def load_game(path: str = SAVE_PATH):
     for attr, default in defaults.items():
         if not hasattr(engine, attr):
             setattr(engine, attr, default)
+    # 敵AIのオンライン学習器：この保存の続きなら学習内容を保持。ただし観測設計
+    # （POLICY_VERSION）や表の形が変わった古いセーブは互換が無いのでデフォルトへ戻す。
+    from rl.obs import N_ACTIONS, N_STATES
+    from rl.online import OnlineLearner
+    from rl.qlearning import POLICY_VERSION
+    lz = getattr(engine, "enemy_learner", None)
+    if (lz is None or getattr(lz, "version", None) != POLICY_VERSION
+            or getattr(lz, "q", None) is None
+            or lz.q.shape != (N_STATES, N_ACTIONS)):
+        engine.enemy_learner = OnlineLearner.new_default()
     return engine

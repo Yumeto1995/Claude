@@ -62,6 +62,10 @@ def _die(engine: "Engine", target: "Entity") -> None:
         engine.game_over = True
     else:
         engine.message_log.add_message(f"{target.name} を倒した！", colors.ENEMY_DIE)
+        # 学習する敵（RLEnemy）は、死ぬ前に最後の判断を死亡報酬で確定させる
+        on_death = getattr(target.ai, "on_death", None)
+        if on_death is not None:
+            on_death(engine)
         target.ai = None                 # もう動かない
         target.blocks_movement = False   # 死体はすり抜けられる
         loot = getattr(target, "loot", None)

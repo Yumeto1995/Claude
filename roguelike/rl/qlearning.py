@@ -16,7 +16,8 @@ from rl.obs import N_ACTIONS, N_STATES
 
 # 方策ファイルの置き場所（ゲーム本体の RLEnemy もここを読む）
 POLICY_PATH = os.path.join(os.path.dirname(__file__), "policy.npz")
-POLICY_VERSION = 1  # 観測の設計を変えたら上げる（古い方策の誤読み込み防止）
+POLICY_VERSION = 2  # 観測の設計を変えたら上げる（古い方策の誤読み込み防止）
+#   v2: 最寄り味方の方向を状態に追加（群れ連携）。N_STATES 1458→13122。
 
 
 class QLearningAgent:

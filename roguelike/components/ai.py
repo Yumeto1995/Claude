@@ -102,41 +102,67 @@ class HostileEnemy(BaseAI):
 class RLEnemy(HostileEnemy):
     """A*で接近し、隣接したら学習済み方策（Qテーブル）で駆け引きする敵。★強化学習の本番側。
 
-    rl/policy.npz（`python3 -m rl.train` で生成）をクラスで1回だけ読み込み、
-    全個体で共有する。クラス属性なのでセーブデータ（pickle）には含まれない。
+    方策は Engine が持つ OnlineLearner（rl/online.py）＝基本方策 policy.npz の
+    可変コピー。全ゴブリンで共有し、**プレイヤーの実戦から随時学習**して今の
+    プレイヤーに適応する（ニューゲームで基本方策へリセット。詳細は rl/online.py）。
 
     設計（ハイブリッド）：
     - 観測は相対位置・HP等のみで『壁』を認識しないため、接近の経路探索は
       A*（HostileEnemy）に任せる＝ダンジョンの壁/通路でも確実に近づける。
     - 隣接した間合いでは方策で「攻撃／後退／待機」を決める＝HPやプレイヤーの
       スタミナを見て、削れるときに殴り不利なら引く、という駆け引きが出る。
-    - 方策が無い／壊れている場合は純粋な A* 追跡（HostileEnemy）にフォールバック。
+    - 学習対象はこの隣接時の判断だけ（接近は方策外）。敵はグリーディに動くので
+      挙動はブレず、実戦の遷移(s,a,r,s')でだけ Q をそっと更新する（off-policy）。
+    - 学習器が無い／壊れている場合は純粋な A* 追跡（HostileEnemy）にフォールバック。
     """
 
-    _qtable = None       # 全個体で共有するQテーブル（numpy配列）
-    _load_tried = False  # 起動後1回だけ読み込みを試す
+    @staticmethod
+    def _allies(engine: "Engine", target: "Entity") -> List["Entity"]:
+        """観測に渡す『味方（他の生きた敵）』。encode 側で自分は除外される。"""
+        return [
+            e for e in engine.game_map.entities
+            if e is not target and e.ai is not None
+            and e.fighter is not None and e.fighter.hp > 0
+        ]
 
-    @classmethod
-    def _policy(cls):
-        if not cls._load_tried:
-            cls._load_tried = True
-            try:
-                from rl.qlearning import load_qtable  # 遅延import（起動を軽く）
-                cls._qtable = load_qtable()
-            except Exception:
-                cls._qtable = None
-        return cls._qtable
+    def _learn_prev(self, engine: "Engine", learner, target: "Entity",
+                    extra: float = 0.0, done: bool = False) -> None:
+        """前ターンに方策で下した判断 (_rl_prev) を、実戦の結果で1手遅れて学習する。
+
+        与ダメは判断時に確定済み（_rl_prev に保持）。被ダメ・接近は前ターンからの
+        HP/距離の変化で測る。extra は撃破(+R_KILL)や死亡(+R_DEATH)の終端報酬。"""
+        from rl.online import R_APPROACH, R_DEALT, R_STEP, R_TAKEN
+        prev = getattr(self, "_rl_prev", None)
+        if prev is None or learner is None:
+            return
+        self._rl_prev = None
+        taken = prev["hp"] - self.entity.fighter.hp
+        dist_now = max(abs(target.x - self.entity.x), abs(target.y - self.entity.y))
+        approach = (prev["dist"] - dist_now) * R_APPROACH
+        r = prev["dealt"] * R_DEALT + taken * R_TAKEN + approach + R_STEP + extra
+        s2 = prev["s"] if done else rl_obs.encode(
+            self.entity, target, self._allies(engine, target))
+        learner.learn(prev["s"], prev["a"], r, s2, done)
+
+    def on_death(self, engine: "Engine") -> None:
+        """自分が倒された時（combat._die から呼ぶ）。最後の判断を終端・死亡報酬で確定。"""
+        from rl.online import R_DEATH
+        learner = getattr(engine, "enemy_learner", None)
+        self._learn_prev(engine, learner, engine.player, extra=R_DEATH, done=True)
 
     def perform(self, engine: "Engine") -> None:
         # プレイヤーから見えていない敵は動かない（暗闇では眠っている）
         if not engine.game_map.visible[self.entity.x, self.entity.y]:
             return
 
-        q = self._policy()
-        if q is None:
-            return super().perform(engine)  # 方策なし → A*追跡
+        learner = getattr(engine, "enemy_learner", None)
+        if learner is None:
+            return super().perform(engine)  # 学習器なし → A*追跡（学習もしない）
 
         target = engine.player
+        # まず、前ターンの方策判断の結果を学習（1手遅れの報酬でQ更新）
+        self._learn_prev(engine, learner, target)
+
         dx = target.x - self.entity.x
         dy = target.y - self.entity.y
         adjacent = max(abs(dx), abs(dy)) == 1
@@ -145,16 +171,23 @@ class RLEnemy(HostileEnemy):
         if not adjacent:
             return super().perform(engine)
 
-        # 隣接：方策で「攻撃／後退／待機」を決める（間合いの駆け引き）
-        state = rl_obs.encode(self.entity, target)
-        for action in np.argsort(q[state])[::-1]:
+        # 隣接：方策で「攻撃／後退／待機」を決める。味方位置も観測に渡す（群れ連携）。
+        state = rl_obs.encode(self.entity, target, self._allies(engine, target))
+        self_hp0 = self.entity.fighter.hp
+        chosen_a = None
+        dealt = 0.0
+        for action in np.argsort(learner.q[state])[::-1]:
             adx, ady = rl_obs.ACTIONS[action]
             if (adx, ady) == (0, 0):
-                return  # 待機が最善（回復待ち等）
-            # プレイヤー方向なら攻撃
+                chosen_a = action
+                break  # 待機が最善（回復待ち等）
+            # プレイヤー方向なら攻撃（与ダメを記録）
             if (adx, ady) == (self._sign(dx), self._sign(dy)):
+                p_hp = target.fighter.hp
                 MeleeAction(adx, ady).perform(engine, self.entity)
-                return
+                dealt = p_hp - target.fighter.hp
+                chosen_a = action
+                break
             # それ以外は後退/回り込み。動ける方向なら移動
             blocking = engine.game_map.get_blocking_entity_at(
                 self.entity.x + adx, self.entity.y + ady
@@ -164,14 +197,26 @@ class RLEnemy(HostileEnemy):
             move = MovementAction(adx, ady)
             move.perform(engine, self.entity)
             if move.consumes_turn:
-                return
-        # どれも不可なら攻撃にフォールバック（隣接しているので殴る）
-        MeleeAction(self._sign(dx), self._sign(dy)).perform(engine, self.entity)
+                chosen_a = action
+                break
+        if chosen_a is None:
+            # どれも不可なら攻撃にフォールバック（隣接しているので殴る）
+            p_hp = target.fighter.hp
+            MeleeAction(self._sign(dx), self._sign(dy)).perform(engine, self.entity)
+            dealt = p_hp - target.fighter.hp
+            chosen_a = int(np.argmax(learner.q[state]))
+
+        # この判断を記録（次の perform か on_death で報酬付き学習）
+        self._rl_prev = {"s": state, "a": chosen_a, "hp": self_hp0,
+                         "dist": 1, "dealt": dealt}
+        # プレイヤーを倒したら次ターンは来ないので、この一手を即・終端報酬で確定
+        if target.fighter.hp <= 0:
+            from rl.online import R_KILL
+            self._learn_prev(engine, learner, target, extra=R_KILL, done=True)
 
     @staticmethod
     def _sign(v: int) -> int:
         return (v > 0) - (v < 0)
-        # どの行動もできなければ待機
 
 
 class ConfusedEnemy(BaseAI):
