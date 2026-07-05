@@ -137,7 +137,12 @@ def compute_dish(pot: List[str], method: str, boost: float = 1.0) -> Dict:
         total[k] = total[k] * mult[k] * dilution * boost
     tox *= mult["tox"]
 
-    satiety = int((total["carb"] * 1.4 + total["fat"] * 1.1) * METHOD_SATIETY.get(method, 1.0))
+    # 満腹＝主に炭水化物・たんぱく質・脂質から。以前は炭水化物と脂質だけで計算していて
+    # 肉・魚・卵（たんぱく質）が満腹に寄与せず、料理が生で食べるより満腹が少なかった。
+    # たんぱく質を加え、全体を少し底上げ（×1.1）＝生の合計満腹の約1.6倍が目安。
+    # （テスターで多数の組合せを計測して調整。scratchpad/cook_tuner.py）
+    satiety = int((total["carb"] * 1.5 + total["protein"] * 1.4 + total["fat"] * 1.2)
+                  * 1.1 * METHOD_SATIETY.get(method, 1.0))
     heal = int((total["vitA"] + total["vitB"] + total["vitC"]) * 0.5)
     nutrients = {k: int(round(total[k])) for k in NUTRIENTS}  # 料理が持つ栄養（食事で蓄積）
     shelf = METHOD_SHELF.get(method, 150)  # 保存系の調理法は日持ちする
