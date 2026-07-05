@@ -47,10 +47,10 @@ WARES = {
         (ef.potato, 10),        # 炭水化物・日持ち
         (ef.cheese, 20),        # カルシウム・日持ち
         (ef.honey, 18),         # 炭水化物・超日持ち
-        # 種（拠点の畑に植えて育てる）。作物より安く、育てて出荷すれば利益になる
-        (ef.nut_seed, 8),
-        (ef.herb_seed, 6),
-        (ef.mushroom_seed, 10),
+        # 種（拠点の畑に植えて育てる）。育てて出荷すれば利益になる（種<作物の売値）
+        (ef.nut_seed, 4),
+        (ef.herb_seed, 3),
+        (ef.mushroom_seed, 5),
     ],
 }
 
