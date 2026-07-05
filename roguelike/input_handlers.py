@@ -270,6 +270,10 @@ def held_movement_action(engine: "Engine") -> Optional[Action]:
     keys = pygame.key.get_pressed()
     dx = dy = 0
     for keycode, (kx, ky) in _DIRECTIONS.items():
+        # 拠点では b は建設モードの切替キー。vi移動の南西(b)と衝突して
+        # 「建設モードに入ると左斜め下へ動く」誤作動になるので、移動には使わない。
+        if keycode == pygame.K_b and engine.in_camp:
+            continue
         if keys[keycode]:
             dx += kx
             dy += ky
