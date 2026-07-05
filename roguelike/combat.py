@@ -13,6 +13,35 @@ from components.level import HP_PER_LEVEL, POWER_PER_LEVEL
 
 SEED_DROP_CHANCE = 0.08  # 敵撃破時に種をこぼす確率（栽培のタネを探索でも入手できる）
 
+
+def _free_item_tile(engine: "Engine", x: int, y: int) -> tuple:
+    """(x, y) から最も近い『アイテムの無い歩けるマス』を返す。
+
+    ドロップ先に既にアイテムがあると重なって拾いにくいので、近い順に空きを探す。
+    見つからなければ元の (x, y) を返す（最悪でも消えはしない）。"""
+    import item_category
+    gm = engine.game_map
+
+    def occupied(tx: int, ty: int) -> bool:
+        return any(item_category.is_item(e) and e.x == tx and e.y == ty
+                   for e in gm.entities)
+
+    def usable(tx: int, ty: int) -> bool:
+        return gm.in_bounds(tx, ty) and gm.tiles["walkable"][tx, ty]
+
+    if usable(x, y) and not occupied(x, y):
+        return (x, y)
+    # チェビシェフ距離の近いリングから順に探す＝最寄りの空きマス
+    for r in range(1, 9):
+        for dx in range(-r, r + 1):
+            for dy in range(-r, r + 1):
+                if max(abs(dx), abs(dy)) != r:
+                    continue
+                tx, ty = x + dx, y + dy
+                if usable(tx, ty) and not occupied(tx, ty):
+                    return (tx, ty)
+    return (x, y)
+
 if TYPE_CHECKING:
     from engine import Engine
     from entity import Entity
@@ -72,17 +101,18 @@ def _die(engine: "Engine", target: "Entity") -> None:
         target.ai = None                 # もう動かない
         target.blocks_movement = False   # 死体はすり抜けられる
         loot = getattr(target, "loot", None)
-        if loot is not None:             # ボス等のレア報酬を中央の床に落とす
+        if loot is not None:             # ボス等のレア報酬を最寄りの空きマスに落とす
             half = getattr(target, "size", 1) // 2
-            drop = loot.spawn(target.x + half, target.y + half)
-            engine.game_map.entities.append(drop)
+            lx, ly = _free_item_tile(engine, target.x + half, target.y + half)
+            engine.game_map.entities.append(loot.spawn(lx, ly))
             engine.message_log.add_message(f"{loot.name} を落とした！", colors.LEVEL_UP)
-        # 稀に種をこぼす（栽培のタネを探索でも入手できる）
+        # 稀に種をこぼす（栽培のタネを探索でも入手できる）。既存アイテムに重ねない
         if random.random() < SEED_DROP_CHANCE:
             import entity_factories  # 遅延import（循環回避）
             seed = random.choice([entity_factories.nut_seed, entity_factories.herb_seed,
                                   entity_factories.mushroom_seed])
-            engine.game_map.entities.append(seed.spawn(target.x, target.y))
+            sx, sy = _free_item_tile(engine, target.x, target.y)
+            engine.game_map.entities.append(seed.spawn(sx, sy))
             engine.message_log.add_message(f"{seed.name} がこぼれ落ちた。", colors.ITEM)
         target.size = 1                  # 死体は通常サイズに
         target.name = f"{target.name}の死体"
