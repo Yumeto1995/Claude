@@ -819,6 +819,9 @@ class Renderer:
         # ボスフロアでは画面上部に主のHPバー
         self._render_boss_hud(engine)
 
+        # 画面右上にミニマップ（探索済みマップの縮小図）
+        self._render_minimap(engine)
+
         self._render_panel(engine)
 
         if engine.inventory_open:
@@ -1481,6 +1484,49 @@ class Renderer:
         )
         ax, ay = self.attack_off.get(id(entity), (0.0, 0.0))
         return px + ax - cam_x, py + ay - cam_y
+
+    def _render_minimap(self, engine: "Engine") -> None:
+        """画面右上に探索済みマップの縮小図（ミニマップ）を描く。
+
+        フォグ・オブ・ウォーを尊重し、一度でも見たタイルだけ表示する。床/壁を色分けし、
+        今見えている範囲は明るく、プレイヤー（黄）・下り階段（水色）・可視の敵（赤）を印で示す。
+        """
+        gm = engine.game_map
+        w, h = gm.width, gm.height
+        scale = 2
+        walk = gm.tiles["walkable"]
+        explored = gm.explored
+        visible = gm.visible
+
+        mm = pygame.Surface((w, h))
+        arr = pygame.surfarray.pixels3d(mm)
+        arr[:] = (14, 16, 22)                    # 未探索
+        arr[explored & ~walk] = (58, 60, 72)     # 探索済みの壁
+        arr[explored & walk] = (108, 110, 120)   # 探索済みの床
+        arr[visible & ~walk] = (96, 98, 112)     # 可視の壁
+        arr[visible & walk] = (150, 178, 140)    # 可視の床
+        del arr
+        mm = pygame.transform.scale(mm, (w * scale, h * scale))
+
+        def mark(tx, ty, color, r=1):
+            pygame.draw.rect(mm, color, (tx * scale - r, ty * scale - r, scale + 2 * r, scale + 2 * r))
+
+        dl = gm.downstairs_location
+        if 0 <= dl[0] < w and 0 <= dl[1] < h and explored[dl[0], dl[1]]:
+            mark(dl[0], dl[1], (120, 220, 255))
+        for ent in gm.entities:
+            if (getattr(ent, "ai", None) is not None and ent.fighter is not None
+                    and ent.fighter.hp > 0 and gm.in_bounds(ent.x, ent.y)
+                    and visible[ent.x, ent.y]):
+                mark(ent.x, ent.y, (230, 90, 80))
+        mark(engine.player.x, engine.player.y, (255, 230, 90), r=2)
+
+        mw, mh = mm.get_size()
+        x = self.view_w * TILE_SIZE - mw - 10
+        y = 10
+        pygame.draw.rect(self.screen, (8, 9, 13), (x - 3, y - 3, mw + 6, mh + 6))
+        pygame.draw.rect(self.screen, (150, 152, 164), (x - 3, y - 3, mw + 6, mh + 6), 1)
+        self.screen.blit(mm, (x, y))
 
     def _draw_fx(self, engine: "Engine", cam_x: float, cam_y: float) -> None:
         """斬撃・ダメージ数字をエンティティの上に重ねて描く（cam はピクセル座標）。"""
