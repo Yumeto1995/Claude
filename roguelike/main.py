@@ -2,6 +2,7 @@ import pygame
 
 import colors
 import display_settings as ds
+import music
 import savegame
 from actions import ReturnToTitle
 from engine import Engine
@@ -26,6 +27,7 @@ _ENTER = (pygame.K_RETURN, pygame.K_KP_ENTER)
 
 def run_title(renderer: Renderer, clock) -> str:
     """タイトル画面。'new' / 'load' / 'settings' / 'quit' を返す。"""
+    music.play("menu")   # メニューBGM
     cursor = 0
     while True:
         # 毎回セーブの有無を見て「つづきから」を出し分け
@@ -107,6 +109,7 @@ def run_game(renderer: Renderer, clock, engine: Engine) -> None:
     last_move = 0
     try:
         while True:
+            music.play(music.state_for(engine))   # 村/拠点=村曲、ダンジョン=探索曲に自動切替
             renderer.render(engine)
             events = pygame.event.get()
 
@@ -140,6 +143,7 @@ def run_game(renderer: Renderer, clock, engine: Engine) -> None:
 
 def main():
     pygame.init()
+    music.init()   # BGM（mixer）初期化。使えない環境でも黙って続行
     renderer = build_renderer(ds.load_index())  # 前回選んだ解像度で起動
     clock = pygame.time.Clock()
     try:
