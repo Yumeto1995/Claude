@@ -48,21 +48,26 @@ METHOD_SHELF: Dict[str, int] = {
 # 満腹補正（干物は水分が抜けて軽い）。
 METHOD_SATIETY: Dict[str, float] = {"干す": 0.6}
 
+# 料理の一時効果（ちから/まもり）の持続ターン＝ EFFECT_BASE + magnitude*EFFECT_PER_MAG。
+# 1フロア≒200ターン。強い料理(mag6)で約1フロア持続するようテスターで調整。
+EFFECT_BASE = 60
+EFFECT_PER_MAG = 24
+
 # 名物料理：特定の食材の組合せ（＋指定があれば調理法）で専用料理になる。
 # ingredients は「鍋の中身がちょうどこれと一致」したとき成立（毒料理では不成立）。
 # 効果は栄養ベースの満腹/回復にボーナスを上乗せする。
 RECIPES: List[Dict] = [
     {"ingredients": {"卵": 1, "ミルク": 1}, "method": None, "name": "ふわとろオムレツ",
      "bonus_satiety": 12, "bonus_heal": 6,
-     "effects": [StatusEffect("ちから+2", turns=30, power_bonus=2)]},
+     "effects": [StatusEffect("ちから+2", turns=140, power_bonus=2)]},
     {"ingredients": {"肉": 1}, "method": "干す", "name": "干し肉",
      "bonus_satiety": 6, "shelf_life": 700,
-     "effects": [StatusEffect("ちから+1", turns=24, power_bonus=1)]},
+     "effects": [StatusEffect("ちから+1", turns=120, power_bonus=1)]},
     {"ingredients": {"果実": 2}, "method": None, "name": "フルーツサラダ",
      "bonus_heal": 14, "effects": []},
     {"ingredients": {"チーズ": 1, "リンゴ": 1}, "method": None, "name": "チーズ焼き",
      "bonus_satiety": 14,
-     "effects": [StatusEffect("まもり+2", turns=30, defense_bonus=2)]},
+     "effects": [StatusEffect("まもり+2", turns=140, defense_bonus=2)]},
     {"ingredients": {"蜂蜜": 1, "果実": 1}, "method": None, "name": "蜂蜜がけフルーツ",
      "bonus_satiety": 10, "bonus_heal": 8, "shelf_life": 300, "effects": []},
 ]
@@ -147,12 +152,16 @@ def compute_dish(pot: List[str], method: str, boost: float = 1.0) -> Dict:
     nutrients = {k: int(round(total[k])) for k in NUTRIENTS}  # 料理が持つ栄養（食事で蓄積）
     shelf = METHOD_SHELF.get(method, 150)  # 保存系の調理法は日持ちする
     effects: List[StatusEffect] = []
+    # 効果の持続はテスターで調整：1フロア≒200ターンなので、強い料理（最大magnitude）は
+    # 約1フロア、軽い料理でも半フロアほど効くよう長めに（旧設計は15〜33ターンと短すぎた）。
     pmag = min(int(total["protein"] // 8), 6)
     if pmag > 0:
-        effects.append(StatusEffect(f"ちから+{pmag}", turns=15 + pmag * 3, power_bonus=pmag))
+        effects.append(StatusEffect(f"ちから+{pmag}", turns=EFFECT_BASE + pmag * EFFECT_PER_MAG,
+                                    power_bonus=pmag))
     dmag = min(int((total["iron"] + total["calcium"]) // 8), 6)
     if dmag > 0:
-        effects.append(StatusEffect(f"まもり+{dmag}", turns=15 + dmag * 3, defense_bonus=dmag))
+        effects.append(StatusEffect(f"まもり+{dmag}", turns=EFFECT_BASE + dmag * EFFECT_PER_MAG,
+                                    defense_bonus=dmag))
 
     if tox >= TOX_SEVERE:
         return {

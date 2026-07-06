@@ -110,6 +110,10 @@ class FoodDishConsumable(Consumable):
         f = consumer.fighter
         if f is None:
             return False
+        # 満腹のときは料理も食べられない（生の食料と同じ扱い）
+        if f.max_satiety > 0 and f.satiety >= f.max_satiety:
+            engine.message_log.add_message("満腹で食べられない。", colors.NO_EFFECT)
+            return False
         factor = spoilage.freshness_factor(self.entity)   # 傷み/腐敗で効果減
         if f.max_satiety > 0 and self.satiety:
             f.satiety = max(0, min(f.max_satiety, f.satiety + int(self.satiety * factor)))
