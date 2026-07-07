@@ -8,7 +8,7 @@ import numpy as np
 import colors
 import combat
 from actions import BumpAction, MeleeAction, MovementAction
-from pathfinding import find_path
+from pathfinding import bresenham, find_path
 from rl import obs as rl_obs
 
 if TYPE_CHECKING:
@@ -97,6 +97,117 @@ class HostileEnemy(BaseAI):
             if other is not None and other is not engine.player and other.ai is not None:
                 return other
         return None
+
+    def _retreat(self, engine: "Engine", target: "Entity") -> bool:
+        """target から離れる向きへ1歩下がる（空きマスのみ）。下がれたら True。"""
+        e = self.entity
+        sx = (e.x > target.x) - (e.x < target.x)
+        sy = (e.y > target.y) - (e.y < target.y)
+        for mx, my in ((sx, sy), (sx, 0), (0, sy)):
+            if (mx, my) == (0, 0):
+                continue
+            move = MovementAction(mx, my)
+            move.perform(engine, e)
+            if move.consumes_turn:
+                return True
+        return False
+
+
+class RangedEnemy(HostileEnemy):
+    """遠距離攻撃の敵。射線が通れば離れた位置から撃ち、近づかれたら退く（カイト）。"""
+
+    RANGE = 5   # 射程（マス）
+    KEEP = 2    # この距離以下なら退がる
+
+    def perform(self, engine: "Engine") -> None:
+        if not engine.game_map.visible[self.entity.x, self.entity.y]:
+            return
+        target = engine.player
+        dist = max(abs(target.x - self.entity.x), abs(target.y - self.entity.y))
+        can_shoot = dist <= self.RANGE and self._clear_line(engine, target)
+        if dist <= self.KEEP:
+            # 近すぎ：まず退がる。退がれなければ（袋小路）撃つ／隣接なら殴る。
+            if self._retreat(engine, target):
+                return
+            if can_shoot:
+                self._shoot(engine, target)
+                return
+            if dist == 1:
+                MeleeAction(target.x - self.entity.x,
+                            target.y - self.entity.y).perform(engine, self.entity)
+            return
+        if can_shoot:
+            self._shoot(engine, target)
+            return
+        super().perform(engine)   # 射程外／射線なし：A*で近づく
+
+    def _clear_line(self, engine: "Engine", target: "Entity") -> bool:
+        """自分とプレイヤーの間に壁や他エンティティが無い（射線が通る）か。"""
+        gm = engine.game_map
+        for x, y in bresenham((self.entity.x, self.entity.y), (target.x, target.y))[1:-1]:
+            if not gm.tiles["walkable"][x, y] or gm.get_blocking_entity_at(x, y) is not None:
+                return False
+        return True
+
+    def _shoot(self, engine: "Engine", target: "Entity") -> None:
+        f = self.entity.fighter
+        if f is None or target.fighter is None:
+            return
+        damage = max(1, f.power - target.fighter.defense)
+        engine.message_log.add_message(
+            f"{self.entity.name} が遠くから射撃！ {damage} ダメージ", colors.ENEMY_ATK)
+        engine.pending_fx.append(("flash", target))
+        engine.pending_fx.append(("popup", target.x, target.y, f"-{damage}", (255, 120, 90)))
+        combat.inflict_damage(engine, target, damage, attacker=self.entity)
+
+
+class SupportEnemy(HostileEnemy):
+    """支援型。近くの味方を鼓舞して強化し、プレイヤーからは距離を取る（近接は弱い）。"""
+
+    BUFF_CD = 8       # 鼓舞のクールダウン
+    BUFF_RADIUS = 5   # 鼓舞できる味方までの距離
+    FLEE_DIST = 3     # プレイヤーがこの距離以下なら退く
+
+    def __init__(self, entity: "Entity"):
+        super().__init__(entity)
+        self.cd = 0
+
+    def perform(self, engine: "Engine") -> None:
+        if not engine.game_map.visible[self.entity.x, self.entity.y]:
+            return
+        if self.cd > 0:
+            self.cd -= 1
+        target = engine.player
+        dist = max(abs(target.x - self.entity.x), abs(target.y - self.entity.y))
+        if self.cd == 0:
+            ally = self._buff_target(engine)
+            if ally is not None:
+                from status import StatusEffect
+                ally.status_effects.append(
+                    StatusEffect("鼓舞", turns=18, power_bonus=2, defense_bonus=1))
+                engine.message_log.add_message(
+                    f"{self.entity.name} が {ally.name} を鼓舞した！（攻・防↑）", colors.ENEMY_ATK)
+                engine.pending_fx.append(("flash", ally))
+                self.cd = self.BUFF_CD
+                return
+        if dist <= self.FLEE_DIST and self._retreat(engine, target):
+            return
+        super().perform(engine)   # 味方の近くへ寄る／隣接したら弱く殴る
+
+    def _buff_target(self, engine: "Engine") -> Optional["Entity"]:
+        """鼓舞していない最寄りの味方（範囲内）を返す。"""
+        best = None
+        for e in engine.game_map.entities:
+            if e is self.entity or e is engine.player or e.ai is None:
+                continue
+            if e.fighter is None or e.fighter.hp <= 0:
+                continue
+            if any(s.name == "鼓舞" for s in getattr(e, "status_effects", [])):
+                continue
+            d = max(abs(e.x - self.entity.x), abs(e.y - self.entity.y))
+            if d <= self.BUFF_RADIUS and (best is None or d < best[0]):
+                best = (d, e)
+        return best[1] if best else None
 
 
 class RLEnemy(HostileEnemy):

@@ -760,6 +760,14 @@ class Engine:
         return fx
 
     def handle_enemy_turns(self) -> None:
+        # 敵に付いた一時効果（支援型の『鼓舞』など）を1ターン分減衰させ、切れたら外す。
+        for entity in self.game_map.entities:
+            effs = getattr(entity, "status_effects", None)
+            if entity.ai is not None and effs:
+                for eff in list(effs):
+                    eff.turns -= 1
+                    if eff.turns <= 0:
+                        effs.remove(eff)
         # AI を持つエンティティ（＝敵）だけが行動する。プレイヤーは ai=None。
         for entity in list(self.game_map.entities):
             if self.game_over:

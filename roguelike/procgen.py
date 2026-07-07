@@ -95,7 +95,19 @@ def place_entities(
         if any(e.x == x and e.y == y for e in dungeon.entities):
             continue
 
-        template = entity_factories.goblin if random.random() < 0.8 else entity_factories.slime
+        # (テンプレ, 重み, 出現し始める階)。シレン系を参考に近接主体、遠距離は少数、
+        # 支援(バフ)はさらに少数。強い/特殊な敵は少し深い階から出る。
+        pool = [
+            (entity_factories.goblin, 28, 1),         # 近接
+            (entity_factories.slime, 12, 1),          # 近接
+            (entity_factories.bat, 13, 1),            # 近接（群れ）
+            (entity_factories.goblin_archer, 13, 2),  # 遠距離
+            (entity_factories.orc, 12, 3),            # 近接（強）
+            (entity_factories.goblin_shaman, 13, 3),  # 支援（バフ）
+            (entity_factories.goblin_mage, 9, 4),     # 遠距離（魔法）
+        ]
+        avail = [(t, w) for t, w, minf in pool if floor >= minf]
+        template = random.choices([t for t, _ in avail], weights=[w for _, w in avail])[0]
         monster = template.spawn(x, y)
         _scale_monster(monster, floor)
         dungeon.entities.append(monster)

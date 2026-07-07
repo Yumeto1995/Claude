@@ -4,7 +4,7 @@ sprite は assets/<sprite>.png に対応する。画像が無ければ graphics.
 """
 from __future__ import annotations
 
-from components.ai import BossAI, HostileEnemy, RLEnemy
+from components.ai import BossAI, HostileEnemy, RangedEnemy, RLEnemy, SupportEnemy
 from components.consumable import (
     ConfusionConsumable,
     FoodConsumable,
@@ -65,6 +65,31 @@ boss = Entity(
     fighter=Fighter(hp=90, defense=3, power=9),
     level=Level(xp_given=300),
     size=3,
+)
+
+# --- 追加の敵（シレン系＝近接主体・遠距離少数・支援はさらに少数、の比率を参考に編成）---
+# 近距離（HostileEnemy：近づいて殴る）
+orc = Entity(
+    sprite="orc", name="オーク", blocks_movement=True, ai_cls=HostileEnemy,
+    fighter=Fighter(hp=20, defense=2, power=7), level=Level(xp_given=90),
+)
+bat = Entity(   # 弱いが数で押す群れ敵
+    sprite="bat", name="コウモリ", blocks_movement=True, ai_cls=HostileEnemy,
+    fighter=Fighter(hp=6, defense=0, power=3), level=Level(xp_given=30),
+)
+# 遠距離（RangedEnemy：射線が通れば離れて撃ち、近づかれたら退く）
+goblin_archer = Entity(
+    sprite="goblin_archer", name="ゴブリン弓兵", blocks_movement=True, ai_cls=RangedEnemy,
+    fighter=Fighter(hp=10, defense=0, power=5), level=Level(xp_given=75),
+)
+goblin_mage = Entity(   # 魔法弾。低HP高火力
+    sprite="goblin_mage", name="ゴブリン魔道士", blocks_movement=True, ai_cls=RangedEnemy,
+    fighter=Fighter(hp=8, defense=0, power=6), level=Level(xp_given=95),
+)
+# 支援（SupportEnemy：味方を鼓舞して強化。前には出ない）
+goblin_shaman = Entity(
+    sprite="goblin_shaman", name="ゴブリンシャーマン", blocks_movement=True, ai_cls=SupportEnemy,
+    fighter=Fighter(hp=12, defense=1, power=3), level=Level(xp_given=100),
 )
 
 # --- アイテム（blocks_movement=False：床に置かれ、踏むと拾える）---
