@@ -208,8 +208,7 @@ class Engine:
             self.player.inventory.items.append(entity_factories.healing_potion.spawn(0, 0))
         # 拠点の倉庫に各種の種を入れておく＝最初から畑で農業を始められる
         for seed in (entity_factories.nut_seed, entity_factories.herb_seed,
-                     entity_factories.mushroom_seed, entity_factories.potato_seed,
-                     entity_factories.fruit_seed):
+                     entity_factories.mushroom_seed, entity_factories.potato_seed):
             for _ in range(3):
                 self.storage.append(seed.spawn(0, 0))
 

@@ -94,9 +94,13 @@ def options(engine: "Engine") -> List[Dict[str, Any]]:
         return opts
 
     if menu == "storage":
+        import item_category
         equip = engine.player.equipment
         opts = []
         for it in list(items):
+            # 大切なもの（テント・証・鍵）は預けられない＝失って詰むのを防ぐ
+            if item_category.category_of(it) == item_category.ItemCategory.KEY:
+                continue
             opts.append({"text": f"預ける: {it.name}",
                          "enabled": not equip.item_is_equipped(it),
                          "kind": "deposit", "data": it})

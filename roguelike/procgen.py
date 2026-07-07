@@ -165,7 +165,6 @@ def place_items(
             (entity_factories.herb_seed, 4),
             (entity_factories.mushroom_seed, 4),
             (entity_factories.potato_seed, 4),
-            (entity_factories.fruit_seed, 4),
             (entity_factories.ranch_key, 2),
             (entity_factories.fishery_key, 2),
             (entity_factories.chicken, 3),

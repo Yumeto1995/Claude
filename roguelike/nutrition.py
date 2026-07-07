@@ -25,7 +25,7 @@ FOOD_NUTRITION: Dict[str, Dict[str, int]] = {
     # リンゴ＝果物。ビタミンCと炭水化物が主（旧「木の実」由来の脂質18は実態に合わず削除）。
     # これで数少なかったビタミンC源に、序盤から手に入る一般食材を1つ加える。
     "リンゴ":   {"carb": 18, "vitC": 12, "vitA": 3, "calcium": 3},
-    "薬草":     {"vitC": 20, "vitA": 16, "calcium": 8, "iron": 4},
+    "アロエ":     {"vitC": 20, "vitA": 16, "calcium": 8, "iron": 4},
     "キノコ":   {"vitB": 14, "protein": 6, "iron": 4, "tox": 5},
     "肉":       {"protein": 28, "fat": 12, "iron": 14, "vitB": 10, "tox": 4},
     "毒キノコ": {"vitB": 8, "protein": 4, "tox": 22},
@@ -36,7 +36,7 @@ FOOD_NUTRITION: Dict[str, Dict[str, int]] = {
     "フグ":     {"protein": 24, "calcium": 6, "tox": 18},
     "携帯食料": {"carb": 22, "protein": 8, "fat": 10, "vitB": 2},
     # 追加食材（栄養ニッチ）
-    "イモ":     {"carb": 24, "vitC": 8, "fat": 2},          # 炭水化物の塊
+    "じゃがいも":     {"carb": 24, "vitC": 8, "fat": 2},          # 炭水化物の塊
     "果実":     {"vitC": 22, "carb": 14, "vitA": 6},        # 2つめのビタミンC源
     "貝":       {"calcium": 16, "iron": 12, "protein": 14, "tox": 3},  # カルシウム＋鉄
     "チーズ":   {"calcium": 22, "fat": 16, "protein": 12},  # 日持ちするカルシウム源

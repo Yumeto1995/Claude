@@ -252,7 +252,7 @@ preserved_food = Entity(
     consumable=FoodConsumable(amount=50), shelf_life=600,  # 保存食。最長だが不滅ではない
 )
 herb = Entity(
-    sprite="food_herb", name="薬草", blocks_movement=False,
+    sprite="food_herb", name="アロエ", blocks_movement=False,
     consumable=FoodConsumable(amount=15), shelf_life=200,
 )
 mushroom = Entity(
@@ -266,7 +266,7 @@ meat = Entity(
 
 # 追加食材（栄養ニッチを埋める。日持ちは食材ごとに差をつける）
 potato = Entity(
-    sprite="food_potato", name="イモ", blocks_movement=False,
+    sprite="food_potato", name="じゃがいも", blocks_movement=False,
     consumable=FoodConsumable(amount=30), shelf_life=350,  # 炭水化物源・日持ち長め
 )
 fruit = Entity(
@@ -297,19 +297,15 @@ nut_seed = Entity(
     item_category=ItemCategory.MATERIAL,
 )
 herb_seed = Entity(
-    sprite="seed", name="薬草の種", blocks_movement=False,
+    sprite="seed", name="アロエの種", blocks_movement=False,
     item_category=ItemCategory.MATERIAL,
 )
 mushroom_seed = Entity(
     sprite="seed", name="キノコの種", blocks_movement=False,
     item_category=ItemCategory.MATERIAL,
 )
-potato_seed = Entity(       # 野菜：イモ（収穫で種が採れる）
-    sprite="seed", name="イモの種", blocks_movement=False,
-    item_category=ItemCategory.MATERIAL,
-)
-fruit_seed = Entity(        # 果物：果実（収穫しても株が残り再収穫できる）
-    sprite="seed", name="果実の種", blocks_movement=False,
+potato_seed = Entity(       # 野菜：じゃがいも（収穫で種が採れる）
+    sprite="seed", name="じゃがいもの種", blocks_movement=False,
     item_category=ItemCategory.MATERIAL,
 )
 

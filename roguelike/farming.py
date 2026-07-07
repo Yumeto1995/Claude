@@ -22,11 +22,10 @@ if TYPE_CHECKING:
 # 種名 → 栽培情報。crop=育つ食材 / steps=収穫までの歩数 / kind="veg"|"fruit" /
 # seed=収穫時に返る種テンプレート（野菜のみ。果物は株が残るので省略）。
 SEEDS = {
-    "リンゴの種": {"crop": ef.nuts,     "steps": 50, "kind": "fruit"},
-    "果実の種":   {"crop": ef.fruit,    "steps": 55, "kind": "fruit"},
-    "薬草の種":   {"crop": ef.herb,     "steps": 50, "kind": "veg", "seed": ef.herb_seed},
-    "キノコの種": {"crop": ef.mushroom, "steps": 70, "kind": "veg", "seed": ef.mushroom_seed},
-    "イモの種":   {"crop": ef.potato,   "steps": 60, "kind": "veg", "seed": ef.potato_seed},
+    "リンゴの種":     {"crop": ef.nuts,     "steps": 50, "kind": "fruit"},
+    "アロエの種":     {"crop": ef.herb,     "steps": 50, "kind": "veg", "seed": ef.herb_seed},
+    "キノコの種":     {"crop": ef.mushroom, "steps": 70, "kind": "veg", "seed": ef.mushroom_seed},
+    "じゃがいもの種": {"crop": ef.potato,   "steps": 60, "kind": "veg", "seed": ef.potato_seed},
 }
 
 # 追加食材（extra_foods.py）の栽培も取り込む。果物=株が残り再収穫／野菜・穀物=収穫で種。
