@@ -84,7 +84,7 @@ goblin_archer = Entity(
 )
 goblin_mage = Entity(   # 魔法弾。低HP高火力
     sprite="goblin_mage", name="ゴブリン魔道士", blocks_movement=True, ai_cls=RangedEnemy,
-    fighter=Fighter(hp=8, defense=0, power=6), level=Level(xp_given=95),
+    fighter=Fighter(hp=8, defense=0, power=5), level=Level(xp_given=90),
 )
 # 支援（SupportEnemy：味方を鼓舞して強化。前には出ない）
 goblin_shaman = Entity(

@@ -153,7 +153,8 @@ class RangedEnemy(HostileEnemy):
         f = self.entity.fighter
         if f is None or target.fighter is None:
             return
-        damage = max(1, f.power - target.fighter.defense)
+        # 遠距離攻撃は防御を半分だけ貫通する（鎧で防ぎきれない＝接近を急ぐ理由になる）
+        damage = max(1, f.power - target.fighter.defense // 2)
         engine.message_log.add_message(
             f"{self.entity.name} が遠くから射撃！ {damage} ダメージ", colors.ENEMY_ATK)
         engine.pending_fx.append(("flash", target))
@@ -183,8 +184,9 @@ class SupportEnemy(HostileEnemy):
             ally = self._buff_target(engine)
             if ally is not None:
                 from status import StatusEffect
+                # 攻撃だけ上げる（防御は上げない＝味方が硬くなりすぎて倒せない膠着を避ける）
                 ally.status_effects.append(
-                    StatusEffect("鼓舞", turns=18, power_bonus=2, defense_bonus=1))
+                    StatusEffect("鼓舞", turns=12, power_bonus=2, defense_bonus=0))
                 engine.message_log.add_message(
                     f"{self.entity.name} が {ally.name} を鼓舞した！（攻・防↑）", colors.ENEMY_ATK)
                 engine.pending_fx.append(("flash", ally))
