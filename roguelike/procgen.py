@@ -160,6 +160,9 @@ def place_items(
             (entity_factories.cow, 3),
             (entity_factories.bait, 4),
         ]
+        # 追加食材（extra_foods.py）と、その種もドロップ表に混ぜる＝食材の種類が一気に増える
+        pool += [(f, 1.0) for f in entity_factories.EXTRA_FOODS.values()]
+        pool += [(s, 0.6) for s in entity_factories.EXTRA_SEEDS.values()]
         template = random.choices([t for t, _ in pool], weights=[w for _, w in pool])[0]
         dungeon.entities.append(template.spawn(x, y))
 

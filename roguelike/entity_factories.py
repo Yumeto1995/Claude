@@ -374,3 +374,20 @@ fishery_key = Entity(
     consumable=UnlockZoneConsumable("fishery", "漁業"),
     item_category=ItemCategory.KEY,
 )
+
+
+# --- 追加食材（extra_foods.py のテーブルから動的生成。栄養/満腹/日持ち/種を一括登録）---
+import extra_foods as _xf
+
+EXTRA_FOODS = {}   # 食材名 → 食材 Entity
+EXTRA_SEEDS = {}   # 食材名 → 種 Entity（栽培可能な食材のみ）
+for _name, _d in _xf.FOODS.items():
+    EXTRA_FOODS[_name] = Entity(
+        sprite=_d["sprite"], name=_name, blocks_movement=False,
+        consumable=FoodConsumable(amount=_d["sat"]), shelf_life=_d["shelf"],
+    )
+    if _d.get("plant"):
+        EXTRA_SEEDS[_name] = Entity(
+            sprite="seed", name=_name + "の種", blocks_movement=False,
+            item_category=ItemCategory.MATERIAL,
+        )

@@ -29,6 +29,17 @@ SEEDS = {
     "イモの種":   {"crop": ef.potato,   "steps": 60, "kind": "veg", "seed": ef.potato_seed},
 }
 
+# 追加食材（extra_foods.py）の栽培も取り込む。果物=株が残り再収穫／野菜・穀物=収穫で種。
+import extra_foods as _xf
+for _name, _d in _xf.FOODS.items():
+    if not _d.get("plant"):
+        continue
+    _kind = "fruit" if _d["plant"] == "fruit" else "veg"
+    _entry = {"crop": ef.EXTRA_FOODS[_name], "steps": _d["steps"], "kind": _kind}
+    if _kind == "veg":
+        _entry["seed"] = ef.EXTRA_SEEDS[_name]
+    SEEDS[_name + "の種"] = _entry
+
 
 def seed_names_in(items: List["Entity"]) -> List[str]:
     names: List[str] = []
